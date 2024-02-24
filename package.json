@@ -4,6 +4,7 @@
   "license": "None",
   "private": true,
   "scripts": {
+    "prepare": "bunx husky install",
     "fmt": "bunx prettier --write .",
     "start": "bun run src/cli.ts"
   },
@@ -13,6 +14,11 @@
     "commander": "^12.0.0"
   },
   "devDependencies": {
-    "@commander-js/extra-typings": "^12.0.0"
+    "@commander-js/extra-typings": "^12.0.0",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2"
+  },
+  "lint-staged": {
+    "*.ts": "bun run lint-staged"
   }
 }
