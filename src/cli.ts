@@ -1,13 +1,12 @@
-import { Command } from '@commander-js/extra-typings';
-import { App } from './app';
+import { Command } from "@commander-js/extra-typings";
+import { App } from "./app";
 const program = new Command();
 
-program
-  .option('-d, --debug', 'Display debug logs')
+program.option("-d, --debug", "Display debug logs");
 
 program
-  .command('it')
-  .description('Deploy the application')
+  .command("it")
+  .description("Deploy the application")
   .action(() => {
     const options = program.opts();
     const app = new App(options);
@@ -15,5 +14,3 @@ program
   });
 
 program.parse(process.argv);
-
-// const options = program.opts();

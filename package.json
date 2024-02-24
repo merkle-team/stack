@@ -1,4 +1,12 @@
 {
+  "name": "ship",
+  "version": "0.0.1",
+  "license": "None",
+  "private": true,
+  "scripts": {
+    "fmt": "bunx prettier --write .",
+    "start": "bun run src/cli.ts"
+  },
   "dependencies": {
     "@aws-sdk/client-auto-scaling": "^3.521.0",
     "@aws-sdk/client-ec2": "^3.521.0",
