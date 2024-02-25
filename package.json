@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@commander-js/extra-typings": "^12.0.0",
+    "bun-types": "^1.0.29",
     "husky": "^9.0.11",
     "lint-staged": "^15.2.2"
   },

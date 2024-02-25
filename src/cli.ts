@@ -7,10 +7,15 @@ program.option("-d, --debug", "Display debug logs");
 program
   .command("it")
   .description("Deploy the application")
-  .action(() => {
+  .action(async () => {
     const options = program.opts();
     const app = new App(options);
-    app.deploy();
+    try {
+      await app.deploy();
+    } catch (e: unknown) {
+      console.error(e);
+      process.exit(1);
+    }
   });
 
 program.parse(process.argv);
