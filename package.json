@@ -12,7 +12,10 @@
     "@aws-sdk/client-auto-scaling": "^3.521.0",
     "@aws-sdk/client-ec2": "^3.521.0",
     "@aws-sdk/client-elastic-load-balancing-v2": "^3.521.0",
-    "commander": "^12.0.0"
+    "@cdktf/provider-aws": "^19.9.0",
+    "@sinclair/typebox": "^0.32.15",
+    "commander": "^12.0.0",
+    "yaml": "^2.4.1"
   },
   "devDependencies": {
     "@commander-js/extra-typings": "^12.0.0",

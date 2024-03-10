@@ -4,6 +4,12 @@ const program = new Command();
 
 program.option("-d, --debug", "Display debug logs");
 
+program.option(
+  "-c, --config <path>",
+  "Path to the configuration file",
+  "deploy.yml",
+);
+
 program
   .command("it")
   .description("Deploy the application")

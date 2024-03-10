@@ -1,4 +1,9 @@
 import { $ } from "bun";
+import { parse as parseYaml } from "yaml";
+import { promises as fsPromises } from "fs";
+import { Construct } from "constructs";
+import { App as CdkApp, TerraformStack } from "cdktf";
+import { provider, alb, lb } from "@cdktf/provider-aws";
 import {
   AutoScaling,
   AutoScalingGroup,
@@ -13,12 +18,114 @@ import {
   TargetGroupNotFoundException,
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { sleep } from "./util";
+import { Type, type Static } from "@sinclair/typebox";
+import { Value } from "@sinclair/typebox/value";
+import { TypeCompiler } from "@sinclair/typebox/compiler";
 
 const DOCKER_COMPOSE_VERSION = "2.24.6";
 const AMI_ID = "ami-0a330430a1504ef77"; // 64-bit ARM Amazon Linux 2023 with Docker + Docker Compose already installed
 const HOST_USER = "ec2-user";
 const AWS_ACCOUNT_ID = "526236635984";
 const CIDR_BLOCK = "10.0.0.0/16";
+
+const DeployConfigSchema = Type.Object({
+  stack: Type.String(),
+
+  "load-balancers": Type.Record(
+    Type.String(),
+    Type.Object({
+      type: Type.Union([Type.Literal("application"), Type.Literal("network")]),
+      public: Type.Optional(Type.Boolean({ default: false })),
+    }),
+    { additionalProperties: false, default: {} },
+  ),
+
+  pods: Type.Record(
+    Type.String(),
+    Type.Object({
+      image: Type.String({ pattern: "^ami-[a-f0-9]+$" }),
+      instance: Type.Union([
+        Type.Literal("t4g.medium"),
+        Type.Literal("t4g.large"),
+      ]), // TODO: Generate dynamically somehow
+
+      "health-check-grace-period": Type.Optional(Type.Integer({ minimum: 0 })),
+
+      compose: Type.String(),
+
+      endpoints: Type.Optional(
+        Type.Record(
+          Type.String(),
+          Type.Object({
+            "load-balancer": Type.Optional(Type.String()),
+            protocol: Type.Union([
+              Type.Literal("HTTP"),
+              Type.Literal("HTTPS"),
+              Type.Literal("TCP"),
+              Type.Literal("UDP"),
+              Type.Literal("TCP_UDP"),
+              Type.Literal("TLS"),
+            ]),
+            port: Type.Integer({ minimum: 1, maximum: 65535 }),
+            cert: Type.String(),
+            "idle-timeout": Type.Optional(
+              Type.Integer({ minimum: 1, default: 60 }),
+            ),
+            deregistration: Type.Optional(
+              Type.Object({
+                delay: Type.Integer({ minimum: 0 }),
+                action: Type.Optional(
+                  Type.Union(
+                    [
+                      Type.Literal("do-nothing"),
+                      Type.Literal("force-terminate-connection"),
+                    ],
+                    { default: "do-nothing" },
+                  ),
+                ),
+              }),
+            ),
+            target: Type.Object({
+              port: Type.Integer({ minimum: 1, maximum: 65535 }),
+              protocol: Type.Union([
+                Type.Literal("HTTP"),
+                Type.Literal("HTTPS"),
+                Type.Literal("TCP"),
+                Type.Literal("UDP"),
+                Type.Literal("TCP_UDP"),
+                Type.Literal("TLS"),
+              ]),
+              "health-check": Type.Object({
+                path: Type.String(),
+                "success-codes": Type.Union([
+                  Type.Integer({ minimum: 200, maximum: 599 }),
+                  Type.String(),
+                ]),
+                "healthy-threshold": Type.Integer({ minimum: 1 }),
+                "unhealthy-threshold": Type.Integer({ minimum: 1 }),
+                timeout: Type.Integer({ minimum: 1 }),
+                interval: Type.Integer({ minimum: 5 }),
+              }),
+            }),
+          }),
+        ),
+      ),
+    }),
+  ),
+
+  network: Type.Object({
+    id: Type.String({ pattern: "^vpc-[a-f0-9]+$" }),
+
+    subnets: Type.Object({
+      public: Type.Array(Type.String({ pattern: "^subnet-[a-f0-9]+$" })),
+      private: Type.Array(Type.String({ pattern: "^subnet-[a-f0-9]+$" })),
+    }),
+  }),
+});
+
+const DEPLOY_CONFIG_COMPILER = TypeCompiler.Compile(DeployConfigSchema);
+
+type DeployConfig = Static<typeof DeployConfigSchema>;
 
 // Script to run both after ini
 const generateDeployScript = (
@@ -65,13 +172,95 @@ fi
 
 export class App {
   private options: Record<string, any>;
+  private config: DeployConfig;
 
   constructor(options: Record<string, any>) {
     this.options = JSON.parse(JSON.stringify(options));
   }
 
   public async deploy() {
+    this.config = parseYaml(
+      (await fsPromises.readFile(this.options.config)).toString(),
+    );
+    const configErrors = [...DEPLOY_CONFIG_COMPILER.Errors(this.config)];
+    if (configErrors?.length) {
+      for (const error of configErrors) {
+        console.log(`${error.message} at ${error.path}`);
+      }
+      throw new Error("Invalid configuration file");
+    }
+
+    // Ensure all defaults are set
+    this.config = Value.Default(
+      DeployConfigSchema,
+      this.config,
+    ) as DeployConfig;
+
     const deployStartTime = Date.now();
+
+    const outdir = "cdktf.out";
+    const app = new CdkApp({ outdir });
+    const stack = new DeployStack(
+      app,
+      this.config.stack,
+      this.config,
+      (stack) => {
+        new provider.AwsProvider(stack, "aws", {
+          region: "us-east-1",
+        });
+
+        for (const [lbName, lbOptions] of Object.entries(
+          this.config["load-balancers"],
+        )) {
+          const fullLbName = `${stack}-${lbName}`;
+
+          const ref = new lb.Lb(stack, lbName, {
+            name: fullLbName,
+            loadBalancerType: lbOptions.type,
+            internal: !lbOptions.public,
+            subnets: lbOptions.public
+              ? this.config.network.subnets.public
+              : this.config.network.subnets.private,
+          });
+        }
+
+        /*
+      new instance.Instance(stack, "Hello", {
+        ami: AMI_ID,
+        instanceType: "t4g.medium",
+        vpcSecurityGroupIds: ["sg-01b670b361df0bd92"],
+        subnetId: "subnet-09d8bb56d08618935",
+        keyName: "sds2",
+
+        instanceMarketOptions: {
+          marketType: 'spot',
+        },
+
+        connection: {
+          type: 'ssh',
+          user: 'ec2-user',
+          agent: "true",
+          host: "${self.private_ip}",
+        },
+        
+        provisioners: [{
+          type: 'remote-exec',
+          inline: [
+            'date',
+          ],
+        }],
+      });
+      */
+      },
+    );
+    app.synth();
+
+    // await $`cdktf plan ${stack} --skip-synth --output=${outdir}`;
+    await $`cdktf apply ${stack} --skip-synth --output=${outdir}`;
+    // await $`cdktf destroy ${stack} --skip-synth --output=${outdir}`;
+
+    process.exit(1);
+
     const ec2 = new EC2({
       region: "us-east-1",
     });
@@ -552,5 +741,18 @@ echo "$new_release_dir" > current
     }
 
     console.info(`Total time: ${Date.now() - deployStartTime}ms`);
+  }
+}
+
+class DeployStack extends TerraformStack {
+  constructor(
+    scope: Construct,
+    id: string,
+    config: DeployConfig,
+    fn: (stack: DeployStack) => void,
+  ) {
+    super(scope, id);
+
+    fn(this);
   }
 }
