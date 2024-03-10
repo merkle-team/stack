@@ -1,17 +1,67 @@
+import { $ } from "bun";
 import {
   AutoScaling,
   AutoScalingGroup,
   Instance,
   LifecycleState,
 } from "@aws-sdk/client-auto-scaling";
-import { EC2, InstanceStateName } from "@aws-sdk/client-ec2";
-import { $ } from "bun";
+import { EC2 } from "@aws-sdk/client-ec2";
+import {
+  ElasticLoadBalancingV2,
+  ProtocolEnum,
+  TargetGroup,
+  TargetGroupNotFoundException,
+} from "@aws-sdk/client-elastic-load-balancing-v2";
 import { sleep } from "./util";
 
 const DOCKER_COMPOSE_VERSION = "2.24.6";
+const AMI_ID = "ami-0a330430a1504ef77"; // 64-bit ARM Amazon Linux 2023 with Docker + Docker Compose already installed
 const HOST_USER = "ec2-user";
-const MAX_ATTEMPTS = 3;
 const AWS_ACCOUNT_ID = "526236635984";
+const CIDR_BLOCK = "10.0.0.0/16";
+
+// Script to run both after ini
+const generateDeployScript = (
+  project: string,
+  pod: string,
+  releaseId: string,
+) => `
+# Initialize the release directory if we haven't already
+if [ ! -d /home/${HOST_USER}/releases/${releaseId} ]; then
+  new_release_dir="/home/${HOST_USER}/releases/${releaseId}"
+  mkdir -p "$new_release_dir"
+  cd "$new_release_dir" 
+
+  cat <<EOF > docker-compose.yml
+version: "3.8"
+
+services:
+  test:
+    image: caddy:2
+    command: ["caddy", "file-server", "--debug", "--browse"]
+    #image: ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${project}-${pod}:${releaseId}
+    network_mode: host
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "printf 'GET / HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' | nc localhost 80"]
+      start_period: 5s
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: "journald"
+EOF
+
+  if [ -f /home/${HOST_USER}/releases/current ]; then
+    # Instance was already deployed to, so there's currently containers running.
+    # Download/build any images we need to in preparation for the switchover (blocks until finished)
+    docker compose up --no-start
+  else 
+    # Otherwise, no containers are running so start them up now
+    docker compose up --detach --wait --wait-timeout 60
+  fi
+fi
+`;
 
 export class App {
   private options: Record<string, any>;
@@ -21,7 +71,11 @@ export class App {
   }
 
   public async deploy() {
+    const deployStartTime = Date.now();
     const ec2 = new EC2({
+      region: "us-east-1",
+    });
+    const elb = new ElasticLoadBalancingV2({
       region: "us-east-1",
     });
     const asg = new AutoScaling({
@@ -33,6 +87,73 @@ export class App {
     // Want to be able to use release ID as a domain name one day
     const releaseId = `${new Date().toISOString().replace(/\:/g, "-").replace(/\./g, "-").replace("Z", "z")}`; // TODO: Suffix with commit hash
     const asgName = `${project}-${pod}-asg`;
+
+    const vpcsResult = await ec2.describeVpcs({
+      Filters: [
+        {
+          Name: "cidr",
+          Values: [CIDR_BLOCK],
+        },
+      ],
+    });
+    if (!vpcsResult.Vpcs?.length) {
+      throw new Error(`No VPC found for CIDR ${CIDR_BLOCK}`);
+    }
+    const vpc = vpcsResult.Vpcs[0];
+
+    // Ensure the defined load balancer exists
+    const loadBalancerName = "test-lb"; // `${project}-${pod}-lb`; TODO: Create load balancer if it doesn't exist?
+    const loadBalancersResult = await elb.describeLoadBalancers({
+      Names: [loadBalancerName],
+    });
+    if (!loadBalancersResult.LoadBalancers?.length) {
+      throw new Error(`Load balancer ${loadBalancerName} does not exist`);
+    }
+
+    const targetGroupName = `${project}-${pod}-lb`;
+    let tg: TargetGroup;
+    try {
+      const tgsResult = await elb.describeTargetGroups({
+        Names: [targetGroupName],
+      });
+      tg = tgsResult.TargetGroups[0];
+    } catch (e) {
+      // Annoying that this is how the API works
+      if (!(e instanceof TargetGroupNotFoundException)) throw e;
+
+      console.warn(
+        `Target group ${targetGroupName} does not exist, creating...`,
+      );
+      const tgsResult = await elb.createTargetGroup({
+        Name: targetGroupName,
+        VpcId: vpc.VpcId,
+        Protocol: ProtocolEnum.HTTP,
+        ProtocolVersion: "HTTP1",
+        Port: 80,
+        HealthCheckEnabled: true,
+        HealthCheckIntervalSeconds: 5, // Minimum
+        HealthyThresholdCount: 2, // Minimum
+        UnhealthyThresholdCount: 2, // Minimum
+        HealthCheckTimeoutSeconds: 2,
+        HealthCheckPath: "/",
+        HealthCheckProtocol: ProtocolEnum.HTTP,
+        Matcher: {
+          HttpCode: "200",
+        },
+        Tags: [
+          {
+            Key: "Project",
+            Value: project,
+          },
+          {
+            Key: "Pod",
+            Value: pod,
+          },
+        ],
+      });
+
+      tg = tgsResult.TargetGroups[0];
+    }
 
     let asgsResult = await asg.describeAutoScalingGroups({
       AutoScalingGroupNames: [asgName],
@@ -48,7 +169,7 @@ export class App {
           return undefined;
         });
       if (!ltExists?.LaunchTemplates?.length) {
-        // TODO: Include Docker Compose file preparation in launch template, and update launch template after each deploy
+        // TODO: Update launch template after each deploy
 
         console.debug("No launch template found, creating one...");
         const ltCreateResult = await ec2.createLaunchTemplate({
@@ -58,7 +179,7 @@ export class App {
             // EbsOptimized: true,
             // HibernationOptions: {},
             // IamInstanceProfile: {},
-            ImageId: "ami-0f93c02efd1974b8b", // 64-bit ARM Amazon Linux 2023
+            ImageId: AMI_ID,
             InstanceInitiatedShutdownBehavior: "terminate",
             // InstanceMarketOptions: {}, // Spot?
             InstanceType: "t4g.medium", // 2 vCPUs, 4 GB RAM
@@ -74,7 +195,7 @@ export class App {
             // TagSpecifications: [],
             UserData: Buffer.from(
               `#!/bin/bash
-set -x
+set -x -e -o pipefail
 
 dnf update -y
 dnf install -y docker
@@ -98,6 +219,15 @@ cat <<EOF > /home/${HOST_USER}/.docker/config.json
 	}
 }
 EOF
+
+cd /home/${HOST_USER}
+cat <<INIT > initialize.sh
+${generateDeployScript(project, pod, releaseId)}
+INIT
+chmod +x /home/${HOST_USER}/initialize.sh
+
+# Since we're using cloud-init, run the script as ec2-user so permissions are correct
+su ${HOST_USER} /home/${HOST_USER}/initialize.sh
   `,
             ).toString("base64"),
           },
@@ -111,7 +241,7 @@ EOF
           Version: "$Latest",
         },
 
-        MinSize: 2,
+        MinSize: 1,
         MaxSize: 2,
         DesiredCapacity: 2,
 
@@ -147,8 +277,6 @@ EOF
           },
         ],
 
-        // TargetGroupARNs: [], // Probably don't need to specify this on initial creation
-
         // Subnet IDs (required)
         VPCZoneIdentifier: [
           "subnet-09d8bb56d08618935", // private-1b
@@ -157,7 +285,12 @@ EOF
         ].join(","),
 
         // Which load balancers? (not required on initial creation)
-        // TrafficSources:
+        TrafficSources: [
+          {
+            Identifier: tg.TargetGroupArn,
+            Type: "TargetGroup",
+          },
+        ],
       });
 
       asgsResult = await asg.describeAutoScalingGroups({
@@ -228,6 +361,39 @@ EOF
       throw new Error(`No private IPs found for ASG ${asgName}`);
     }
 
+    console.info(
+      `Waiting for ${privateIps.length} instances to enter InService state...`,
+    );
+    await Promise.all(
+      instanceDetails.map(
+        async ({ InstanceId: instanceId, PrivateIpAddress: ip }) => {
+          let inserviceStartTime = Date.now();
+          for (;;) {
+            let standbyInstances = await asg.describeAutoScalingInstances({
+              InstanceIds: [instanceId],
+            });
+            const standbyDetails = standbyInstances.AutoScalingInstances || [];
+            if (
+              standbyDetails.every(
+                (i) => i.LifecycleState === LifecycleState.IN_SERVICE,
+              )
+            ) {
+              break;
+            }
+            if (Date.now() - inserviceStartTime > 60_000) {
+              throw new Error(
+                `Instance ${instanceId} (${ip}) did not enter InService state within 60 seconds. Aborting deploy`,
+              );
+            }
+            console.info(
+              `Waiting for instance ${instanceId} (${ip}) to enter InService state...`,
+            );
+            await sleep(5000);
+          }
+        },
+      ),
+    );
+
     console.info("Preparing release to the following IPs:", privateIps);
     await Promise.all(
       instanceDetails.map(async ({ PrivateIpAddress: ip }) => {
@@ -235,49 +401,19 @@ EOF
         while (Date.now() - startTime < 120_000) {
           try {
             const connectResult =
-              await $`ssh -o StrictHostKeychecking=accept-new -a ${HOST_USER}@${ip} bash -s < ${new Response(
-                `# Execute these commands on the remote server in a Bash shell
+              await $`ssh -o StrictHostKeychecking=no -a ${HOST_USER}@${ip} bash -s < ${new Response(`
+# Execute these commands on the remote server in a Bash shell
 set -e -o pipefail
 
-echo Connected to ${ip}
+ip="$(hostname -I | awk '{print $1}')"
+echo Connected to $ip
 while [ ! -f /home/${HOST_USER}/.docker/config.json ]; do 
-  echo "Waiting for ${ip} to finish initializing via cloud-init..."
-  sleep 1
+  echo "Waiting for $ip to finish initialization via cloud-init..."
+  sleep 5
 done
 
-new_release_dir="/home/${HOST_USER}/releases/${releaseId}"
-mkdir -p "$new_release_dir"
-cd "$new_release_dir" 
-
-cat <<EOF > docker-compose.yml
-version: "3.8"
-
-services:
-  test:
-    image: caddy:2
-    command: ["caddy", "file-server", "--debug", "--browse"]
-    #image: ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${project}-${pod}:${releaseId}
-    network_mode: host
-    ports:
-      - "80:80"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "printf 'GET / HTTP/1.1\r\nHost: localhost\r\n\r\n' | nc localhost 80"]
-      start_period: 5s
-      interval: 5s
-      timeout: 3s
-      retries: 3
-    #logging:
-    #  driver: "json-file"
-    #  options:
-    #    max-size: "10m"
-    #    max-file: "5"
-EOF
-
-# Download/build any images we need to in preparation for the switchover (blocks until finished)
-docker compose up --no-start
-            `,
-              )}`;
+${generateDeployScript(project, pod, releaseId)}
+            `)}`;
             if (connectResult.exitCode !== 0) {
               throw new Error(
                 `Error connecting to ${ip} (exit code ${connectResult.exitCode})`,
@@ -293,6 +429,7 @@ docker compose up --no-start
             }
             console.warn(
               `Unable to connect to ${ip}. Retrying in 5 seconds...`,
+              e,
             );
             await sleep(5000);
           }
@@ -342,10 +479,10 @@ docker compose up --no-start
           const connectResult =
             await $`ssh -a ${HOST_USER}@${ip} bash -s < ${new Response(
               `# Execute these commands on the remote server in a Bash shell
-set -e -o pipefail
+set -x -e -o pipefail
 
 # Stop the current release if there is one
-if [ -f /home/${HOST_USER}/releases/current && -d "$(cat /home/${HOST_USER}/releases/current)" ]; then
+if [ -f /home/${HOST_USER}/releases/current ]; then
   cd "$(cat /home/${HOST_USER}/releases/current)"
   docker compose down --timeout 30 # Blocks until finished or timed out
 fi
@@ -357,7 +494,8 @@ cd "$new_release_dir"
 docker compose up --detach --wait --wait-timeout 60
 
 # Update "current" location to point to the new release
-echo "$new_release_dir" > ../current
+cd ..
+echo "$new_release_dir" > current
           `,
             )}`;
           if (connectResult.exitCode !== 0) {
@@ -400,13 +538,19 @@ echo "$new_release_dir" > ../current
           if (Date.now() - startTime > 120_000) {
             console.error(
               `Unable to deploy to ${ip} after 2 minutes. Aborting deploy.`,
+              e,
             );
             throw e;
           }
-          console.warn(`Unable to deploy to ${ip}. Retrying in 5 seconds...`);
+          console.warn(
+            `Unable to deploy to ${ip}. Retrying in 5 seconds...`,
+            e,
+          );
           await sleep(5000);
         }
       }
     }
+
+    console.info(`Total time: ${Date.now() - deployStartTime}ms`);
   }
 }
