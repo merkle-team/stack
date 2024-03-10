@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  rpc:
+    image: public.ecr.aws/docker/library/caddy:2
+    command: ["caddy", "file-server", "--debug", "--browse"]
+    init: true
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "printf 'GET / HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' | nc localhost 80",
+        ]
+      start_period: 5s
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: "journald"
+  websocket:
+    image: public.ecr.aws/docker/library/caddy:2
+    command: ["caddy", "file-server", "--debug", "--browse"]
+    init: true
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "printf 'GET / HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' | nc localhost 80",
+        ]
+      start_period: 5s
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: "journald"

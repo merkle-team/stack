@@ -1,6 +1,6 @@
-# ship
+# `stack`
 
-Tool for deploying services on EC2 instances.
+Tool for deploying services on EC2 instances in our infrastructure.
 
 ## Configuration
 

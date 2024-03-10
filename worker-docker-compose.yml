@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  worker:
+    image: public.ecr.aws/docker/library/caddy:2
+    command: ["caddy", "file-server", "--debug", "--browse"]
+    init: true
+    network_mode: host
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "printf 'GET / HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' | nc localhost 80",
+        ]
+      start_period: 5s
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: "journald"
+
+  autoheal:
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: all
+    image: willfarrell/autoheal:1.1.0
+    network_mode: none
+    restart: always
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock
