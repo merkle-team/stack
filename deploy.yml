@@ -2,91 +2,160 @@
 # Stacks represent a collection of infrastructure + pods deployed together to provide a "service".
 stack: backend
 
+# Defines the names of secrets (not values!) and which pods have access to them
+secrets:
+  HUBBLE_NEMES_RPC_AUTH:
+    podsIncluded: [worker]
+  HUBBLE_NEMES_IDENTITY_BASE64:
+    podsExcluded: [worker]
+
 # If the stack exposes services that receive inbound traffic, declare the load balancers here
-load-balancers:
-  rpc:
-    type: application
-    public: true
-  websocket:
-    type: network
-    public: true
+#loadBalancers:
+#  rpc:
+#    type: application
+#    public: true
+#    idleTimeout: 25 # http/https protocol only. Terminate connection if no data sent in this many seconds
+#  websocket:
+#    type: network
+#    public: true
 
 # Each pod is a collection of Docker containers running on a single EC2 instance
 pods:
-  api:
-    image: ami-0a330430a1504ef77 # 64-bit ARM Amazon Linux 2023 with Docker Compose already installed
-    instance: t4g.medium # 2 vCPUs, 4GB RAM, ARM
+  #api:
+  #  image: ami-0043411a51efdba8e # 64-bit ARM Amazon Linux 2023 with Docker Compose already installed
+  #  instanceType: m7gd.medium # 2 vCPUs, 4GB RAM, ARM, attached NVME storage
 
-    # Give this much time after an instance first starts up before starting to perform health checks
-    health-check-grace-period: 60
+  #  initScript: mount-attached-storage.sh
 
-    # Path to Docker Compose configuration that defines containers, volumes, networks, etc.
-    compose: ./relative/path/to/api/docker-compose.yml
+  #  # Path to Docker Compose configuration that defines containers, volumes, networks, etc.
+  #  compose: api-docker-compose.yml
 
-    # Endpoints exposed by the pod
-    endpoints:
-      rpc:
-        load-balancer: rpc # Reference to load balancer above
-        protocol: HTTPS
-        port: 443
-        cert: "b51562e2-ae0c-4dd9-a19c-d7cca5f9d53d" # *.warpcast.com
-        idle-timeout: 25 # http/https protocol only. Terminate connection if no data sent in this many seconds
-        deregistration:
-          delay: 30 # How long to wait
-          action: do-nothing # Or force-terminate-connection
-        target:
-          port: 8080
-          protocol: HTTP # Protocol used to communicate with target (HTTP1)
-          health-check:
-            path: /healthcheck
-            success-codes: 200 # Can be comma separated or range, e.g. "200,202" or "200-204"
-            healthy-threshold: 2
-            unhealthy-threshold: 2
-            timeout: 2
-            interval: 10 # Must be >= timeout
+  #  # Give this much time after an instance first starts up before starting to perform health checks
+  #  healthCheckGracePeriod: 30
 
-      websocket:
-        load-balancer: websocket # Reference to load balancer above
-        protocol: TLS
-        port: 443
-        cert: "b51562e2-ae0c-4dd9-a19c-d7cca5f9d53d" # *.warpcast.com
-        deregistration:
-          delay: 0
-          action: force-terminate-connection
-        target:
-          port: 8080
-          protocol: TCP # Protocol used to communicate with target
-          health-check:
-            path: /healthcheck
-            success-codes: 200 # Can be comma separated or range, e.g. "200,202" or "200-204"
-            healthy-threshold: 2
-            unhealthy-threshold: 2
-            timeout: 2
-            interval: 10 # Must be >= timeout
+  #  minHealthyInstances: 1
+  #  minHealthyPercentage: 100
+  #  maxHealthyPercentage: 200
+
+  #  onDemandBaseCapacity: 1
+  #  onDemandPercentageAboveBaseCapacity: 0
+
+  #  deploy:
+  #    replaceWith: new-containers # Or new-instances (default, safer)
+  #    detachBeforeContainerSwap: false # If zero downtime not possible, faster if we don't wait for detachment
+
+  #  # Endpoints exposed by the pod
+  #  endpoints:
+  #    rpc:
+  #      loadBalancer:
+  #        name: rpc # Reference to load balancer above
+  #        protocol: HTTPS
+  #        port: 443
+  #        cert: warpcast.com # Use certificate with domain warpcast.com
+  #      target:
+  #        port: 8080
+  #        protocol: HTTP # Protocol used to communicate with target (HTTP1)
+  #        deregistration:
+  #          delay: 30 # How long to wait
+  #          action: do-nothing # Or force-terminate-connection
+  #        healthCheck:
+  #          path: /
+  #          successCodes: 200 # Can be comma separated or range, e.g. "200,202" or "200-204"
+  #          healthyThreshold: 2
+  #          unhealthyThreshold: 2
+  #          timeout: 2
+  #          interval: 5 # Must be >= timeout
+
+  #    websocket:
+  #      loadBalancer:
+  #        name: websocket # Reference to load balancer above
+  #        protocol: TLS
+  #        port: 443
+  #        cert: warpcast.com
+  #      target:
+  #        port: 8081
+  #        protocol: TCP # Protocol used to communicate with target
+  #        deregistration:
+  #          delay: 0
+  #          action: force-terminate-connection
+  #        healthCheck:
+  #          path: /
+  #          successCodes: 200 # Can be comma separated or range, e.g. "200,202" or "200-204"
+  #          healthyThreshold: 2
+  #          unhealthyThreshold: 2
+  #          timeout: 2
+  #          interval: 10 # Must be >= timeout
 
   worker:
-    image: ami-0f93c02efd1974b8b
-    instance: t4g.medium
-    health-grace-period: 60
-    compose: ./relative/path/to/worker/docker-compose.yml
+    image: ami-0043411a51efdba8e
+    instanceType: t4g.medium
+    compose: worker-docker-compose.yml
+    healthCheckGracePeriod: 30
+    minHealthyInstances: 1
+    minHealthyPercentage: 100
+    maxHealthyPercentage: 200
+    onDemandBaseCapacity: 1
+    onDemandPercentageAboveBaseCapacity: 0
+    deploy:
+      replaceWith: new-containers # Or new-instances (default, safer)
+      detachBeforeContainerSwap: false # If zero downtime not possible, faster if we don't wait for detachment
+      shutdownTimeout: 10
 
-  stream-worker:
-    image: ami-0f93c02efd1974b8b
-    instance: t4g.medium
-    health-grace-period: 60
-    compose: ./relative/path/to/stream-worker/docker-compose.yml
-
-  temporal-worker:
-    image: ami-0f93c02efd1974b8b
-    instance: t4g.medium
-    health-grace-period: 60
-    compose: ./relative/path/to/temporal-worker/docker-compose.yml
+  #stream-worker:
+  #  image: ami-0043411a51efdba8e
+  #  instanceType: t4g.medium
+  #  compose: worker-docker-compose.yml
+  #  healthCheckGracePeriod: 30
+  #  minHealthyInstances: 1
+  #  minHealthyPercentage: 100
+  #  maxHealthyPercentage: 200
+  #  onDemandBaseCapacity: 1
+  #  onDemandPercentageAboveBaseCapacity: 0
+  #  deploy:
+  #    replaceWith: new-containers # Or new-instances (default, safer)
+  #    detachBeforeContainerSwap: false # If zero downtime not possible, faster if we don't wait for detachment
 
   singleton:
-    image: ami-0f93c02efd1974b8b
-    instance: t4g.medium
-    health-grace-period: 60
-    compose: ./relative/path/to/singleton/docker-compose.yml
+    image: ami-0043411a51efdba8e
+    instanceType: t4g.medium
+    compose: worker-docker-compose.yml
+    healthCheckGracePeriod: 30
+    minHealthyInstances: 1
+    minHealthyPercentage: 100
+    maxHealthyPercentage: 200
+    onDemandBaseCapacity: 1
+    onDemandPercentageAboveBaseCapacity: 0
+    deploy:
+      replaceWith: new-containers # Or new-instances (default, safer)
+      detachBeforeContainerSwap: false # If zero downtime not possible, faster if we don't wait for detachment
+      shutdownTimeout: 10
+
+  #stream-worker:
+  #  image: ami-0a330430a1504ef77
+  #  instanceType: t4g.medium
+  #  healthCheckGracePeriod: 60
+  #  minHealthyInstances: 1
+  #  minHealthyPercentage: 100
+  #  maxHealthyPercentage: 200
+  #  compose: ./relative/path/to/stream-worker/docker-compose.yml
+
+  #temporal-worker:
+  #  image: ami-0a330430a1504ef77
+  #  instanceType: t4g.medium
+  #  healthCheckGracePeriod: 60
+  #  minHealthyInstances: 1
+  #  minHealthyPercentage: 100
+  #  maxHealthyPercentage: 200
+  #  compose: ./relative/path/to/temporal-worker/docker-compose.yml
+
+  #singleton:
+  #  image: ami-0a330430a1504ef77
+  #  instanceType: t4g.medium
+  #  healthCheckGracePeriod: 60
+  #  minHealthyInstances: 1
+  #  minHealthyPercentage: 100
+  #  maxHealthyPercentage: 200
+  #  compose: ./relative/path/to/singleton/docker-compose.yml
 
 network:
   id: vpc-0f6f9a87c6da89cc3 # VPC ID to deploy the service within
