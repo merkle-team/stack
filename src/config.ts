@@ -109,11 +109,13 @@ export const DeployConfigSchema = Type.Object({
                 ),
               }),
               healthCheck: Type.Object({
-                path: Type.String(),
-                successCodes: Type.Union([
-                  Type.Integer({ minimum: 200, maximum: 599 }),
-                  Type.String(),
-                ]),
+                path: Type.Optional(Type.String()),
+                successCodes: Type.Optional(
+                  Type.Union([
+                    Type.Integer({ minimum: 200, maximum: 599 }),
+                    Type.String(),
+                  ]),
+                ),
                 healthyThreshold: Type.Integer({ minimum: 1 }),
                 unhealthyThreshold: Type.Integer({ minimum: 1 }),
                 timeout: Type.Integer({ minimum: 1 }),
@@ -191,6 +193,21 @@ export function parseConfig(configPath: string) {
           );
         }
       }
+    }
+  }
+
+  for (const [podName, podConfig] of Object.entries(config.pods)) {
+    const result = Bun.spawnSync([
+      "docker",
+      "compose",
+      "-f",
+      podConfig.compose,
+      "config",
+    ]);
+    if (!result.success) {
+      throw new Error(
+        `Invalid compose file ${podConfig.compose} for pod ${podName}\n${result.stdout.toString()}\n${result.stderr.toString()}`,
+      );
     }
   }
 

@@ -55,6 +55,7 @@ if [ ! -d /home/${HOST_USER}/releases/${releaseId} ]; then
   echo "RELEASE=${releaseId}" >> .env
   INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
   echo "INSTANCE_ID=\$INSTANCE_ID" >> .env
+  echo "\$INSTANCE_ID" | sudo tee /etc/instance-id > /dev/null
   sudo chmod 444 /etc/instance-id
   echo "INSTANCE_MARKET=\$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-life-cycle)" >> .env
   echo "PRIVATE_IPV4=\$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)" >> .env
@@ -939,7 +940,7 @@ export class App {
                 unhealthyThreshold:
                   endpointOptions.target.healthCheck.unhealthyThreshold,
                 matcher:
-                  endpointOptions.target.healthCheck.successCodes.toString(),
+                  endpointOptions.target.healthCheck.successCodes?.toString(),
                 path: endpointOptions.target.healthCheck.path,
                 port: endpointOptions.target.port.toString(),
                 protocol: endpointOptions.target.protocol,
