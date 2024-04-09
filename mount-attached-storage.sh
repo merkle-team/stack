@@ -14,3 +14,7 @@ echo "$DEVICE_NAME $MOUNT_DIR xfs defaults,noatime 0 2" >> /etc/fstab
 # Mount!
 mkdir -p $MOUNT_DIR
 mount $DEVICE_NAME $MOUNT_DIR
+
+# Set sysctl parameter on host since container can't modify host sysctl and is
+# using host networking
+sysctl -w net.ipv4.tcp_keepalive_time=300
