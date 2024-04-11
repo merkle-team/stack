@@ -1074,6 +1074,7 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
           healthCheckType: Object.keys(podOptions.endpoints || {}).length
             ? "ELB"
             : "EC2",
+          waitForCapacityTimeout: `${podOptions.healthCheckGracePeriod}s`,
 
           trafficSource: Object.values(tgs).map((tg) => ({
             identifier: tg.arn,
@@ -1091,7 +1092,6 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
             minHealthyPercentage: podOptions.minHealthyPercentage,
             maxHealthyPercentage: podOptions.maxHealthyPercentage,
           },
-          // TODO: Should we ignore this value in terraform and instead set it dynamically during deploy?
           waitForElbCapacity: podOptions.minHealthyInstances,
 
           instanceRefresh:
@@ -1139,7 +1139,12 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
 
           lifecycle: {
             // After we've created the ASG for the first time, this is managed separately
-            ignoreChanges: ["min_size", "max_size", "desired_capacity"],
+            ignoreChanges: [
+              "min_size",
+              "max_size",
+              "desired_capacity",
+              "wait_for_elb_capacity",
+            ],
           },
         });
       }
