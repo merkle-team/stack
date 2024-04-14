@@ -4,7 +4,7 @@
   "license": "None",
   "private": true,
   "scripts": {
-    "compile": "mkdir -p build && bun build --compile --sourcemap ./src/cli.ts --outfile build/stack && rm -rf .*.bun-build",
+    "compile": "mkdir -p build && bun install --frozen-lockfile && bun build --compile --sourcemap ./src/cli.ts --outfile build/stack && rm -rf .*.bun-build",
     "prepare": "bunx husky install",
     "fmt": "bunx prettier --write .",
     "stack": "bun run src/cli.ts"
