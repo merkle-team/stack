@@ -113,3 +113,18 @@ network:
       - subnet-0fdd713886476d21c # private-1d
       - subnet-0d4f99e3a3569ec11 # private-1f
 ```
+
+## Installation
+
+Since this is in active development, you can only install this from source for now.
+
+### From source
+
+Check out this repository and run:
+
+```bash
+bun compile
+```
+
+This will create the `stack` executable in the `build`, which is self-contained.
+You can add this to your PATH or install however you please.
