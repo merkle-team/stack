@@ -1,9 +1,10 @@
 {
-  "name": "ship",
+  "name": "stack",
   "version": "0.0.1",
   "license": "None",
   "private": true,
   "scripts": {
+    "compile": "mkdir -p build && bun build --compile --sourcemap ./src/cli.ts --outfile build/stack && rm -rf .*.bun-build",
     "prepare": "bunx husky install",
     "fmt": "bunx prettier --write .",
     "stack": "bun run src/cli.ts"
@@ -14,13 +15,13 @@
     "@aws-sdk/client-elastic-load-balancing-v2": "^3.521.0",
     "@aws-sdk/client-secrets-manager": "^3.529.1",
     "@cdktf/provider-aws": "^19.9.0",
+    "@commander-js/extra-typings": "^12.0.0",
     "@sinclair/typebox": "^0.32.15",
     "commander": "^12.0.0",
     "inquirer": "^9.2.16",
     "yaml": "^2.4.1"
   },
   "devDependencies": {
-    "@commander-js/extra-typings": "^12.0.0",
     "@types/inquirer": "^9.0.7",
     "bun-types": "^1.0.29",
     "husky": "^9.0.11",
