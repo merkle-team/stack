@@ -40,6 +40,12 @@ export const DeployConfigSchema = Type.Object({
   pods: Type.Record(
     Type.String(),
     Type.Object({
+      environment: Type.Optional(
+        Type.Array(Type.String({ pattern: "^[A-Z0-9_]+$" }), {
+          uniqueItems: true,
+        }),
+      ),
+
       image: Type.String({ pattern: "^ami-[a-f0-9]+$" }),
       instanceType: Type.String(),
       publicIp: Type.Optional(Type.Boolean()),
@@ -197,6 +203,16 @@ export function parseConfig(configPath: string) {
   }
 
   for (const [podName, podConfig] of Object.entries(config.pods)) {
+    if (podConfig.environment) {
+      for (const envName of podConfig.environment) {
+        if (process.env[envName] === undefined) {
+          throw new Error(
+            `Environment variable ${envName} is required by pod ${podName}, but was not provided in the environment`,
+          );
+        }
+      }
+    }
+
     const result = Bun.spawnSync([
       "docker",
       "compose",
