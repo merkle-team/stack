@@ -33,8 +33,16 @@ const HOST_USER = "ec2-user";
 const MAX_RELEASES_TO_KEEP = 1;
 const TF_ENVARS = { TF_IN_AUTOMATION: "1" };
 
+const generateEnvVarsForPod = (config: DeployConfig, podName: string) => {
+  const podEnvVars = (config.pods[podName].environment || [])
+    .map((envName) => `${envName}=${process.env[envName]}`)
+    .join("\n");
+  return podEnvVars;
+};
+
 const generateDeployScript = (
   stackName: string,
+  config: DeployConfig,
   pod: string,
   releaseId: string,
   composeContents: string,
@@ -52,24 +60,38 @@ if [ ! -d /home/${HOST_USER}/releases/${releaseId} ]; then
 
   IMDS_TOKEN="\$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")"
 
-  echo "RELEASE=${releaseId}" >> .env
+  # Create environment file with values that are constant for this deployed instance
+  echo "# Instance environment variables (constant for the lifetime of this instance)" > .static.env
+  echo "RELEASE=${releaseId}" >> .static.env
   INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
-  echo "INSTANCE_ID=\$INSTANCE_ID" >> .env
+  echo "INSTANCE_ID=\$INSTANCE_ID" >> .static.env
   echo "\$INSTANCE_ID" | sudo tee /etc/instance-id > /dev/null
   sudo chmod 444 /etc/instance-id
-  echo "INSTANCE_MARKET=\$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-life-cycle)" >> .env
-  echo "PRIVATE_IPV4=\$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)" >> .env
+  echo "INSTANCE_MARKET=\$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-life-cycle)" >> .static.env
+  echo "PRIVATE_IPV4=\$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)" >> .static.env
   public_ipv4="\$(curl -sf -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 || echo "")"
   if [ -n "\$public_ipv4" ]; then
-    echo "PUBLIC_IPV4=\$public_ipv4" >> .env
+    echo "PUBLIC_IPV4=\$public_ipv4" >> .static.env
   fi
   ipv6="\$(curl -sf -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/ipv6 || echo "")"
   if [ -n "\$public_ipv4" ]; then
-    echo "IPV6=\$ipv6" >> .env
+    echo "IPV6=\$ipv6" >> .static.env
   fi
+  chmod 400 .static.env
+
+  # Write current values of environment variables current set for this pod
+  echo "# Pod environment variables (can change with each deploy)" > .pod.env
+  echo "${Buffer.from(generateEnvVarsForPod(config, pod)).toString("base64")}" | base64 -d >> .pod.env
+  echo "" >> .pod.env # Ensure newline between envars and secrets
   # Write secrets this instance currently has access to
   # TODO: Handle case where there are more than 100 secrets
-  aws secretsmanager batch-get-secret-value --secret-id-list ${secretNames.join(" ")} --output json | jq -r '.SecretValues[] | .Name + "=" + .SecretString' >> .env
+  aws secretsmanager batch-get-secret-value --secret-id-list ${secretNames.join(" ")} --output json | jq -r '.SecretValues[] | .Name + "=" + .SecretString' >> .pod.env
+  chmod 400 .pod.env
+
+  # Append instance environment variables
+  cat .static.env > .env
+  echo "" >> .env # Add newline in case newlines are missing from the end of the file
+  cat .pod.env >> .env
   chmod 400 .env
 
   # Convert compose file into base64 so we don't interpolate environment variables
@@ -188,8 +210,9 @@ export class App {
     );
 
     // Only perform a swap if there are already running instances.
-    if (alreadyRunningInstances.length)
+    if (alreadyRunningInstances.length) {
       await this.swapContainers(release, alreadyRunningInstances);
+    }
 
     // TODO: Wait until all ASGs are healthy and at desired count
 
@@ -290,7 +313,7 @@ export class App {
   
   echo Pulling containers on ${InstanceId} ${ip}
   
-  ${generateDeployScript(this.config.stack, podName, releaseId, composeContents, this.allowedPodSecrets(podName))}
+  ${generateDeployScript(this.config.stack, this.config, podName, releaseId, composeContents, this.allowedPodSecrets(podName))}
               `)}`;
                 if (connectResult.exitCode !== 0) {
                   throw new Error(
@@ -1052,7 +1075,7 @@ echo "Starting before-init script $(cat /proc/uptime | awk '{ print $1 }') secon
 ./before-init.sh
 echo "Finished before-init script $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
 
-echo "${Buffer.from(generateDeployScript(this.config.stack, podName, releaseId, composeContents, allowedPodSecrets)).toString("base64")}" | base64 -d > init.sh
+echo "${Buffer.from(generateDeployScript(this.config.stack, this.config, podName, releaseId, composeContents, allowedPodSecrets)).toString("base64")}" | base64 -d > init.sh
 chmod +x init.sh
 echo "Starting init script $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
 # Execute as host user so that created file permissions are correct
