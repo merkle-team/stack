@@ -104,7 +104,7 @@ if [ ! -d /home/${HOST_USER}/releases/${releaseId} ]; then
   if [ -f /home/${HOST_USER}/releases/current ]; then
     # Instance was already deployed to, so there's currently containers running.
     # Download/build any images we need to in preparation for the switchover (blocks until finished)
-    docker compose up --no-start
+    docker compose build --pull
   else 
     echo "Starting Docker containers $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
 
