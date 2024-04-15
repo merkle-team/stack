@@ -203,16 +203,6 @@ export function parseConfig(configPath: string) {
   }
 
   for (const [podName, podConfig] of Object.entries(config.pods)) {
-    if (podConfig.environment) {
-      for (const envName of podConfig.environment) {
-        if (process.env[envName] === undefined) {
-          throw new Error(
-            `Environment variable ${envName} is required by pod ${podName}, but was not provided in the environment`,
-          );
-        }
-      }
-    }
-
     const result = Bun.spawnSync([
       "docker",
       "compose",

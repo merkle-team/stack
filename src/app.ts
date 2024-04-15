@@ -165,6 +165,18 @@ export class App {
   public async deploy() {
     const release = this.generateReleaseId();
 
+    for (const [podName, podConfig] of Object.entries(this.config.pods)) {
+      if (podConfig.environment) {
+        for (const envName of podConfig.environment) {
+          if (process.env[envName] === undefined) {
+            throw new Error(
+              `Environment variable ${envName} is required by pod ${podName}, but was not provided in the environment`,
+            );
+          }
+        }
+      }
+    }
+
     await this.init({ release });
 
     const alreadyRunningInstances = await this.alreadyRunningInstances();
