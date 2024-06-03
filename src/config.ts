@@ -1,5 +1,6 @@
 import { parse as parseYaml } from "yaml";
 import { readFileSync } from "fs";
+import path from "path";
 import { Type, type Static } from "@sinclair/typebox";
 import { TypeCompiler } from "@sinclair/typebox/compiler";
 import { Value } from "@sinclair/typebox/value";
@@ -203,6 +204,11 @@ export function parseConfig(configPath: string) {
   }
 
   for (const [podName, podConfig] of Object.entries(config.pods)) {
+    podConfig.compose = path.resolve(
+      path.dirname(configPath),
+      podConfig.compose,
+    );
+
     const result = Bun.spawnSync([
       "docker",
       "compose",
