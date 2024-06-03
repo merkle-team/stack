@@ -132,6 +132,7 @@ export class App {
   }
 
   private parseConfig() {
+    if (this.config) return;
     this.config = parseConfig(this.options.config);
   }
 
@@ -165,6 +166,7 @@ export class App {
   public async deploy() {
     const release = this.generateReleaseId();
 
+    this.parseConfig(); // Need this so `this.config` is set
     for (const [podName, podConfig] of Object.entries(this.config.pods)) {
       if (podConfig.environment) {
         for (const envName of podConfig.environment) {
