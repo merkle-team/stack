@@ -306,7 +306,7 @@ export class App {
             releaseId, // Skip instances on the latest release already
         );
 
-        if (instances.length === 0) {
+        if (instances.length === 0 && podOptions.networkInterfaceId) {
           console.error(
             `No existing instances found for pod ${podName}, but desired capacity is > 0. Canceling deploy.`,
           );
@@ -1130,6 +1130,12 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
             },
             maintenanceOptions: {
               autoRecovery: "default",
+            },
+            tags: {
+              Name: `${fullPodName}-${releaseId}`, // Purely for visual in AWS console, no functional purpose
+              stack: this.config.stack,
+              pod: podName,
+              release: releaseId,
             },
           });
           new NetworkInterfaceSgAttachment(
