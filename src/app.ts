@@ -1126,7 +1126,6 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
           const instance = new Instance(stack, `${fullPodName}-singleton`, {
             launchTemplate: {
               name: lt.name,
-              version: "$Latest",
             },
             maintenanceOptions: {
               autoRecovery: "default",
