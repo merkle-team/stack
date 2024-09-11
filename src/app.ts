@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { DeployConfig, parseConfig } from "./config";
 import { Construct } from "constructs";
 import { App as CdkApp, S3Backend, TerraformStack } from "cdktf";
-import { EC2, Instance } from "@aws-sdk/client-ec2";
+import { EC2 } from "@aws-sdk/client-ec2";
 import {
   provider,
   lb,
@@ -27,6 +27,7 @@ import { IamInstanceProfile } from "@cdktf/provider-aws/lib/iam-instance-profile
 import { sleep } from "./util";
 import { AutoScaling, LifecycleState } from "@aws-sdk/client-auto-scaling";
 import inquirer from "inquirer";
+import { Instance } from "@cdktf/provider-aws/lib/instance";
 
 const CDK_OUT_DIR = ".stack";
 const HOST_USER = "ec2-user";
@@ -1056,10 +1057,9 @@ export class App {
 
             networkInterfaces: [
               {
-                deleteOnTermination: (
-                  podOptions.specialPodType !== "long-lived-singleton"
-                ).toString(),
                 networkInterfaceId: podOptions.networkInterfaceId,
+                deleteOnTermination:
+                  (!podOptions.networkInterfaceId).toString(),
                 associatePublicIpAddress: podOptions.networkInterfaceId
                   ? undefined
                   : (!!podOptions.publicIp).toString(),
@@ -1114,102 +1114,104 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
           },
         );
 
-        const asg = new autoscalingGroup.AutoscalingGroup(stack, podName, {
-          name: fullPodName,
-          minSize: 1,
-          maxSize: 1,
-          desiredCapacity: 1,
-          defaultInstanceWarmup: 60, // Give 1 minute for the instance to start up, download containers, and start before including in CloudWatch metrics
-          defaultCooldown: 0, // Don't wait between scaling actions
-          healthCheckGracePeriod: podOptions.healthCheckGracePeriod,
-          healthCheckType: Object.keys(podOptions.endpoints || {}).length
-            ? "ELB"
-            : "EC2",
-          suspendedProcesses:
-            podOptions.specialPodType === "long-lived-singleton"
-              ? [
-                  "AZRebalance",
-                  "AlarmNotification",
-                  "HealthCheck",
-                  "InstanceRefresh",
-                  "ReplaceUnhealthy",
-                  "ScheduledActions",
-                  "Terminate",
-                ]
-              : [],
-          waitForCapacityTimeout: `${podOptions.healthCheckGracePeriod}s`,
-
-          trafficSource: Object.values(tgs).map((tg) => ({
-            identifier: tg.arn,
-            type: "elbv2",
-          })),
-
-          vpcZoneIdentifier: podOptions.publicIp
-            ? this.config.network.subnets.public
-            : this.config.network.subnets.private,
-          protectFromScaleIn: false,
-
-          terminationPolicies: ["OldestLaunchTemplate"],
-
-          instanceMaintenancePolicy: {
-            minHealthyPercentage: podOptions.minHealthyPercentage,
-            maxHealthyPercentage: podOptions.maxHealthyPercentage,
-          },
-          waitForElbCapacity: podOptions.minHealthyInstances,
-
-          instanceRefresh:
-            podOptions.deploy.replaceWith === "new-instances"
-              ? {
-                  strategy: "Rolling",
-                  preferences: {
-                    minHealthyPercentage: podOptions.minHealthyPercentage,
-                    maxHealthyPercentage: podOptions.maxHealthyPercentage,
-                    autoRollback: true,
-                    scaleInProtectedInstances: "Wait",
-                    standbyInstances: "Wait",
-                    instanceWarmup: "0",
-                  },
-                }
-              : undefined,
-
-          mixedInstancesPolicy: {
-            instancesDistribution: {
-              onDemandAllocationStrategy: "prioritized",
-              onDemandBaseCapacity: 1,
-              onDemandPercentageAboveBaseCapacity: 0,
-              spotAllocationStrategy: "lowest-price",
-            },
+        if (podOptions.networkInterfaceId) {
+          // Can't use ASG with a pre-specified ENI since ASGs assign ENIs directly
+          // so we create the instance directly
+          const instance = new Instance(stack, fullPodName, {
             launchTemplate: {
-              launchTemplateSpecification: {
-                launchTemplateName: lt.name,
-                version: lt.latestVersion.toString(),
+              name: lt.name,
+              version: lt.latestVersion.toString(),
+            },
+            maintenanceOptions: {
+              autoRecovery: "default",
+            },
+          });
+        } else {
+          const asg = new autoscalingGroup.AutoscalingGroup(stack, podName, {
+            name: fullPodName,
+            minSize: 1,
+            maxSize: 1,
+            desiredCapacity: 1,
+            defaultInstanceWarmup: 60, // Give 1 minute for the instance to start up, download containers, and start before including in CloudWatch metrics
+            defaultCooldown: 0, // Don't wait between scaling actions
+            healthCheckGracePeriod: podOptions.healthCheckGracePeriod,
+            healthCheckType: Object.keys(podOptions.endpoints || {}).length
+              ? "ELB"
+              : "EC2",
+            waitForCapacityTimeout: `${podOptions.healthCheckGracePeriod}s`,
+
+            trafficSource: Object.values(tgs).map((tg) => ({
+              identifier: tg.arn,
+              type: "elbv2",
+            })),
+
+            vpcZoneIdentifier: podOptions.publicIp
+              ? this.config.network.subnets.public
+              : this.config.network.subnets.private,
+            protectFromScaleIn: false,
+
+            terminationPolicies: ["OldestLaunchTemplate"],
+
+            instanceMaintenancePolicy: {
+              minHealthyPercentage: podOptions.minHealthyPercentage,
+              maxHealthyPercentage: podOptions.maxHealthyPercentage,
+            },
+            waitForElbCapacity: podOptions.minHealthyInstances,
+
+            instanceRefresh:
+              podOptions.deploy.replaceWith === "new-instances"
+                ? {
+                    strategy: "Rolling",
+                    preferences: {
+                      minHealthyPercentage: podOptions.minHealthyPercentage,
+                      maxHealthyPercentage: podOptions.maxHealthyPercentage,
+                      autoRollback: true,
+                      scaleInProtectedInstances: "Wait",
+                      standbyInstances: "Wait",
+                      instanceWarmup: "0",
+                    },
+                  }
+                : undefined,
+
+            mixedInstancesPolicy: {
+              instancesDistribution: {
+                onDemandAllocationStrategy: "prioritized",
+                onDemandBaseCapacity: 1,
+                onDemandPercentageAboveBaseCapacity: 0,
+                spotAllocationStrategy: "lowest-price",
+              },
+              launchTemplate: {
+                launchTemplateSpecification: {
+                  launchTemplateName: lt.name,
+                  version: lt.latestVersion.toString(),
+                },
               },
             },
-          },
 
-          tag: [
-            {
-              key: "stack",
-              value: this.config.stack,
-              propagateAtLaunch: true,
-            },
-            {
-              key: "pod",
-              value: podName,
-              propagateAtLaunch: true,
-            },
-          ],
-
-          lifecycle: {
-            // After we've created the ASG for the first time, this is managed separately
-            ignoreChanges: [
-              "min_size",
-              "max_size",
-              "desired_capacity",
-              "wait_for_elb_capacity",
+            tag: [
+              {
+                key: "stack",
+                value: this.config.stack,
+                propagateAtLaunch: true,
+              },
+              {
+                key: "pod",
+                value: podName,
+                propagateAtLaunch: true,
+              },
             ],
-          },
-        });
+
+            lifecycle: {
+              // After we've created the ASG for the first time, this is managed separately
+              ignoreChanges: [
+                "min_size",
+                "max_size",
+                "desired_capacity",
+                "wait_for_elb_capacity",
+              ],
+            },
+          });
+        }
       }
     });
     app.synth();
