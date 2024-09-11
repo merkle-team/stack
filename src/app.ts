@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { DeployConfig, parseConfig } from "./config";
 import { Construct } from "constructs";
 import { App as CdkApp, S3Backend, TerraformStack } from "cdktf";
-import { EC2 } from "@aws-sdk/client-ec2";
+import { EC2, Instance as EC2Instance } from "@aws-sdk/client-ec2";
 import {
   provider,
   lb,
@@ -28,6 +28,7 @@ import { sleep } from "./util";
 import { AutoScaling, LifecycleState } from "@aws-sdk/client-auto-scaling";
 import inquirer from "inquirer";
 import { Instance } from "@cdktf/provider-aws/lib/instance";
+import { NetworkInterfaceSgAttachment } from "@cdktf/provider-aws/lib/network-interface-sg-attachment";
 
 const CDK_OUT_DIR = ".stack";
 const HOST_USER = "ec2-user";
@@ -256,10 +257,10 @@ export class App {
     return instances;
   }
 
-  private async swapContainers(releaseId: string, instances: Instance[]) {
+  private async swapContainers(releaseId: string, instances: EC2Instance[]) {
     const instanceIds = new Set(instances.map((i) => i.InstanceId));
     const asg = new AutoScaling({ region: this.config.region });
-    const instancesForPod: Record<string, Instance[]> = {};
+    const instancesForPod: Record<string, EC2Instance[]> = {};
 
     const updateResults = await Promise.allSettled(
       Object.entries(this.config.pods).map(async ([podName, podOptions]) => {
@@ -1065,7 +1066,7 @@ export class App {
                   : (!!podOptions.publicIp).toString(),
                 // Don't add IPv6 addresses if we're using a reusable ENI
                 ipv6AddressCount: podOptions.networkInterfaceId ? undefined : 1,
-                securityGroups: [podSg.id],
+                securityGroups: podOptions.networkInterfaceId ? undefined : [podSg.id],
               },
             ],
 
@@ -1125,6 +1126,10 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
             maintenanceOptions: {
               autoRecovery: "default",
             },
+          });
+          new NetworkInterfaceSgAttachment(stack, `${fullPodName}-sg-attachment`, {
+            networkInterfaceId: podOptions.networkInterfaceId,
+            securityGroupId: podSg.id,
           });
         } else {
           const asg = new autoscalingGroup.AutoscalingGroup(stack, podName, {
