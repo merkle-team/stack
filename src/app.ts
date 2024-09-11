@@ -264,17 +264,20 @@ export class App {
 
     const updateResults = await Promise.allSettled(
       Object.entries(this.config.pods).map(async ([podName, podOptions]) => {
-        const asgName = `${this.config.stack}-${podName}`;
-        const asgResult = await asg.describeAutoScalingGroups({
-          AutoScalingGroupNames: [asgName],
-        });
-        const group = asgResult.AutoScalingGroups?.find(
-          (asg) => asg.AutoScalingGroupName === asgName,
-        );
+        // If pod is part of ASG, check desired capacity before proceeding
+        if (!podOptions.networkInterfaceId) {
+          const asgName = `${this.config.stack}-${podName}`;
+          const asgResult = await asg.describeAutoScalingGroups({
+            AutoScalingGroupNames: [asgName],
+          });
+          const group = asgResult.AutoScalingGroups?.find(
+            (asg) => asg.AutoScalingGroupName === asgName,
+          );
 
-        if (group.DesiredCapacity === 0) {
-          console.warn(`Desired capacity for ${asgName} is 0. Skipping`);
-          return;
+          if (group.DesiredCapacity === 0) {
+            console.warn(`Desired capacity for ${asgName} is 0. Skipping`);
+            return;
+          }
         }
 
         const ec2 = new EC2({ region: this.config.region });
@@ -1123,7 +1126,7 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
           const instance = new Instance(stack, `${fullPodName}-singleton`, {
             launchTemplate: {
               name: lt.name,
-              version: lt.latestVersion.toString(),
+              version: "$Latest",
             },
             maintenanceOptions: {
               autoRecovery: "default",
@@ -1194,7 +1197,7 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
               launchTemplate: {
                 launchTemplateSpecification: {
                   launchTemplateName: lt.name,
-                  version: lt.latestVersion.toString(),
+                  version: "$Latest",
                 },
               },
             },
