@@ -1056,11 +1056,25 @@ export class App {
 
             networkInterfaces: [
               {
-                associatePublicIpAddress: (!!podOptions.publicIp).toString(),
-                ipv6AddressCount: 1, // Assign one IPV6 address
+                deleteOnTermination: (
+                  podOptions.specialPodType !== "long-lived-singleton"
+                ).toString(),
+                networkInterfaceId: podOptions.networkInterfaceId,
+                associatePublicIpAddress: podOptions.networkInterfaceId
+                  ? undefined
+                  : (!!podOptions.publicIp).toString(),
+                // Don't add IPv6 addresses if we're using a reusable ENI
+                ipv6AddressCount: podOptions.networkInterfaceId ? undefined : 1,
                 securityGroups: [podSg.id],
               },
             ],
+
+            // Disable DNS resolution for the instance hostname (e.g. ec2-192-0-2-0.compute-1.amazonaws.com)
+            privateDnsNameOptions: {
+              enableResourceNameDnsAaaaRecord: false,
+              enableResourceNameDnsARecord: false,
+              hostnameType: "resource-name",
+            },
 
             tagSpecifications: [
               {
@@ -1111,6 +1125,18 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
           healthCheckType: Object.keys(podOptions.endpoints || {}).length
             ? "ELB"
             : "EC2",
+          suspendedProcesses:
+            podOptions.specialPodType === "long-lived-singleton"
+              ? [
+                  "AZRebalance",
+                  "AlarmNotification",
+                  "HealthCheck",
+                  "InstanceRefresh",
+                  "ReplaceUnhealthy",
+                  "ScheduledActions",
+                  "Terminate",
+                ]
+              : [],
           waitForCapacityTimeout: `${podOptions.healthCheckGracePeriod}s`,
 
           trafficSource: Object.values(tgs).map((tg) => ({
