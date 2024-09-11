@@ -1117,7 +1117,7 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
         if (podOptions.networkInterfaceId) {
           // Can't use ASG with a pre-specified ENI since ASGs assign ENIs directly
           // so we create the instance directly
-          const instance = new Instance(stack, fullPodName, {
+          const instance = new Instance(stack, `${fullPodName}-singleton`, {
             launchTemplate: {
               name: lt.name,
               version: lt.latestVersion.toString(),
