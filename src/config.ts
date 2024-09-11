@@ -55,6 +55,12 @@ export const DeployConfigSchema = Type.Object({
 
       compose: Type.String(),
 
+      specialPodType: Type.Optional(
+        Type.Union([Type.Literal("long-lived-singleton")]),
+      ),
+
+      networkInterfaceId: Type.Optional(Type.TemplateLiteral("eni-${string}")),
+
       healthCheckGracePeriod: Type.Integer({ minimum: 0 }),
       minHealthyPercentage: Type.Integer({ minimum: 0 }),
       maxHealthyPercentage: Type.Integer({ minimum: 100, maximum: 200 }),
