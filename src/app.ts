@@ -1066,7 +1066,9 @@ export class App {
                   : (!!podOptions.publicIp).toString(),
                 // Don't add IPv6 addresses if we're using a reusable ENI
                 ipv6AddressCount: podOptions.networkInterfaceId ? undefined : 1,
-                securityGroups: podOptions.networkInterfaceId ? undefined : [podSg.id],
+                securityGroups: podOptions.networkInterfaceId
+                  ? undefined
+                  : [podSg.id],
               },
             ],
 
@@ -1127,10 +1129,14 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
               autoRecovery: "default",
             },
           });
-          new NetworkInterfaceSgAttachment(stack, `${fullPodName}-sg-attachment`, {
-            networkInterfaceId: podOptions.networkInterfaceId,
-            securityGroupId: podSg.id,
-          });
+          new NetworkInterfaceSgAttachment(
+            stack,
+            `${fullPodName}-sg-attachment`,
+            {
+              networkInterfaceId: podOptions.networkInterfaceId,
+              securityGroupId: podSg.id,
+            },
+          );
         } else {
           const asg = new autoscalingGroup.AutoscalingGroup(stack, podName, {
             name: fullPodName,
