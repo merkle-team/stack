@@ -300,11 +300,12 @@ export class App {
 
         const instances = describeResult.Reservations?.flatMap(
           (reservation) => reservation.Instances || [],
-        ).filter(
-          (instance) =>
-            instance.Tags?.find((tag) => tag.Key === "release")?.Value !==
-            releaseId, // Skip instances on the latest release already
         );
+        // .filter(
+        //   (instance) =>
+        //     instance.Tags?.find((tag) => tag.Key === "release")?.Value !==
+        //     releaseId, // Skip instances on the latest release already
+        // );
 
         if (instances.length === 0 && podOptions.networkInterfaceId) {
           console.error(
