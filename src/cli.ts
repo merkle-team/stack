@@ -24,9 +24,15 @@ program
 program
   .command("deploy")
   .description("Deploy this stack")
-  .action(async () => {
-    const app = new App(program.opts());
-    await app.deploy();
+  .argument("[pods...]", "Pods to deploy", [])
+  .option(
+    "--skip-apply",
+    "Skip the apply step (faster for swap container deploys)",
+    false,
+  )
+  .action(async (pods, options) => {
+    const app = new App({ ...program.opts(), ...options });
+    await app.deploy(pods);
   });
 
 program

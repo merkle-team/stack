@@ -32,14 +32,25 @@ import { NetworkInterfaceSgAttachment } from "@cdktf/provider-aws/lib/network-in
 
 const CDK_OUT_DIR = ".stack";
 const HOST_USER = "ec2-user";
-const MAX_RELEASES_TO_KEEP = 1;
+const MAX_RELEASES_TO_KEEP = 3;
 const TF_ENVARS = { TF_IN_AUTOMATION: "1" };
 
 const generateEnvVarsForPod = (config: DeployConfig, podName: string) => {
-  const podEnvVars = (config.pods[podName].environment || [])
-    .map((envName) => `${envName}=${process.env[envName]}`)
-    .join("\n");
-  return podEnvVars;
+  if (Array.isArray(config.pods[podName].environment || [])) {
+    const podEnvVars = ((config.pods[podName].environment as string[]) || [])
+      .map((envName) => `${envName}=${process.env[envName]}`)
+      .join("\n");
+    return podEnvVars;
+  } else if (typeof config.pods[podName].environment === "object") {
+    const podEnvVars = Object.entries(config.pods[podName].environment)
+      .map(([envName, envValue]) =>
+        envValue === undefined || envValue === null
+          ? `${envName}=${process.env[envName]}`
+          : `${envName}=${envValue}`,
+      )
+      .join("\n");
+    return podEnvVars;
+  }
 };
 
 const generateDeployScript = (
@@ -48,7 +59,7 @@ const generateDeployScript = (
   pod: string,
   releaseId: string,
   composeContents: string,
-  secretNames: string[],
+  secretNameMappings: Record<string, string>,
 ) => `#!/bin/bash
 set -e -o pipefail
 
@@ -65,6 +76,7 @@ if [ ! -d /home/${HOST_USER}/releases/${releaseId} ]; then
   # Create environment file with values that are constant for this deployed instance
   echo "# Instance environment variables (constant for the lifetime of this instance)" > .static.env
   echo "RELEASE=${releaseId}" >> .static.env
+  echo "POD_NAME=${pod}" >> .static.env
   INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
   echo "INSTANCE_ID=\$INSTANCE_ID" >> .static.env
   echo "\$INSTANCE_ID" | sudo tee /etc/instance-id > /dev/null
@@ -87,35 +99,46 @@ if [ ! -d /home/${HOST_USER}/releases/${releaseId} ]; then
   echo "" >> .pod.env # Ensure newline between envars and secrets
   # Write secrets this instance currently has access to
   # TODO: Handle case where there are more than 100 secrets
-  aws secretsmanager batch-get-secret-value --secret-id-list ${secretNames.join(" ")} --output json | jq -r '.SecretValues[] | .Name + "=" + .SecretString' >> .pod.env
+  aws secretsmanager batch-get-secret-value --secret-id-list ${Object.keys(secretNameMappings).join(" ")} --output json | jq -r '.SecretValues[] | .Name + "=" + .SecretString' >> .pod.env
   chmod 400 .pod.env
+
+  # Replace envar names with mapped names for this pod
+  ${Object.entries(secretNameMappings)
+    .map(
+      ([secretName, mappedName]) =>
+        `sed -i.bak "s/^${secretName}=/${mappedName}=/" .pod.env`,
+    )
+    .join("\n")}
+  rm .pod.env.bak
 
   # Append instance environment variables
   cat .static.env > .env
   echo "" >> .env # Add newline in case newlines are missing from the end of the file
   cat .pod.env >> .env
   chmod 400 .env
+  rm .static.env .pod.env
 
   # Convert compose file into base64 so we don't interpolate environment variables
   echo "${Buffer.from(composeContents).toString("base64")}" | base64 -d > docker-compose.yml
 
-  # Sometimes necessary to avoid weird errors on first boot
-  # See https://github.com/moby/moby/issues/22074#issuecomment-856551466
-  sudo systemctl restart docker
-
   if [ -f /home/${HOST_USER}/releases/current ]; then
     # Instance was already deployed to, so there's currently containers running.
     # Download/build any images we need to in preparation for the switchover (blocks until finished)
+
+    echo "Downloading and preparing Docker images before swapping containers"
     docker compose build --pull
   else 
+    # Sometimes necessary to avoid weird errors on first boot
+    # See https://github.com/moby/moby/issues/22074#issuecomment-856551466
+    sudo systemctl restart docker
+
     echo "Starting Docker containers $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
 
     # Otherwise, no containers are running so start them up now
     # Will wait forever until all containers running/healthy
-    docker compose up --detach --wait 
+    docker compose up --detach
 
     echo "Finished starting Docker containers $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
-    echo "Updating latest release"
     echo "$new_release_dir" > /home/${HOST_USER}/releases/current
   fi
 fi
@@ -130,6 +153,7 @@ export class App {
   }
 
   private generateReleaseId() {
+    if (process.env.RELEASE !== undefined) return process.env.RELEASE;
     return `${new Date().toISOString().replace(/\:/g, "-").replace(/\./g, "-").replace("Z", "z")}`;
   }
 
@@ -165,14 +189,34 @@ export class App {
     process.exit(child.exitCode);
   }
 
-  public async deploy() {
+  public async deploy(podsToDeploy: string[]) {
     const release = this.generateReleaseId();
 
     this.parseConfig(); // Need this so `this.config` is set
     for (const [podName, podConfig] of Object.entries(this.config.pods)) {
-      if (podConfig.environment) {
+      if (podsToDeploy.length > 0 && !podsToDeploy.includes(podName)) continue;
+
+      if (Array.isArray(podConfig.environment)) {
         for (const envName of podConfig.environment) {
           if (process.env[envName] === undefined) {
+            throw new Error(
+              `Environment variable ${envName} is required by pod ${podName}, but was not provided in the environment`,
+            );
+          }
+          if (envName.includes("=")) {
+            throw new Error(
+              `Environment variable ${envName} contains an equals sign, which is not allowed. Use a map if you want to provide explicit values`,
+            );
+          }
+        }
+      } else if (typeof podConfig.environment === "object") {
+        for (const [envName, envValue] of Object.entries(
+          podConfig.environment,
+        )) {
+          if (
+            (envValue === null || envValue === undefined) &&
+            (envValue === process.env[envName]) === undefined
+          ) {
             throw new Error(
               `Environment variable ${envName} is required by pod ${podName}, but was not provided in the environment`,
             );
@@ -181,58 +225,69 @@ export class App {
       }
     }
 
-    await this.init({ release });
-
+    // Get current instances before making any changes
     const alreadyRunningInstances = await this.alreadyRunningInstances();
 
-    const cwd = `${CDK_OUT_DIR}/stacks/${this.config.stack}`;
-    const planCmd = await this.runCommand(
-      [
-        "terraform",
-        "plan",
-        "-detailed-exitcode",
-        "-input=false",
-        "-out=plan.out",
-      ],
-      { cwd, env: { ...process.env, ...TF_ENVARS } },
-    );
-    if (![0, 2].includes(planCmd.exitCode)) process.exit(planCmd.exitCode); // 0 = no changes, 2 = changes to apply
-
-    if (planCmd.exitCode === 2 && !this.options.yes) {
-      console.error(
-        "Changes detected in Terraform plan. Check above to make sure they are intentional.",
-      );
-      const answers = await inquirer.prompt([
-        {
-          name: "proceed",
-          message: "Apply infra changes and then proceed with deploy?",
-        },
-      ]);
-
-      if (!(answers.proceed === "yes" || answers.proceed === "y")) {
-        console.error(
-          `Canceling deploy due to user answering ${answers.proceed} to prompt`,
+    if (!this.options.skipApply) {
+      if (podsToDeploy.length > 0) {
+        throw new Error(
+          "Cannot specify pods to deploy when --skip-apply is not set",
         );
-        process.exit(1);
       }
-    }
 
-    const applyCmd = await this.runCommand(
-      ["terraform", "apply", "-input=false", "plan.out"],
-      {
-        cwd,
-        env: { ...process.env, ...TF_ENVARS },
-      },
-    );
+      await this.init({ release });
+
+      const cwd = `${CDK_OUT_DIR}/stacks/${this.config.stack}`;
+      const planCmd = await this.runCommand(
+        [
+          "terraform",
+          "plan",
+          "-detailed-exitcode",
+          "-input=false",
+          "-out=plan.out",
+        ],
+        { cwd, env: { ...process.env, ...TF_ENVARS } },
+      );
+      if (![0, 2].includes(planCmd.exitCode)) process.exit(planCmd.exitCode); // 0 = no changes, 2 = changes to apply
+
+      if (planCmd.exitCode === 2 && !this.options.yes) {
+        console.error(
+          "Changes detected in Terraform plan. Check above to make sure they are intentional.",
+        );
+        const answers = await inquirer.prompt([
+          {
+            name: "proceed",
+            message: "Apply infra changes and then proceed with deploy?",
+          },
+        ]);
+
+        if (!(answers.proceed === "yes" || answers.proceed === "y")) {
+          console.error(
+            `Canceling deploy due to user answering ${answers.proceed} to prompt`,
+          );
+          process.exit(1);
+        }
+      }
+
+      const applyCmd = await this.runCommand(
+        ["terraform", "apply", "-input=false", "plan.out"],
+        {
+          cwd,
+          env: { ...process.env, ...TF_ENVARS },
+        },
+      );
+
+      if (applyCmd.exitCode !== 0) process.exit(applyCmd.exitCode);
+    }
 
     // Only perform a swap if there are already running instances.
     if (alreadyRunningInstances.length) {
-      await this.swapContainers(release, alreadyRunningInstances);
+      await this.swapContainers(release, alreadyRunningInstances, podsToDeploy);
     }
 
     // TODO: Wait until all ASGs are healthy and at desired count
 
-    process.exit(applyCmd.exitCode);
+    process.exit(0);
   }
 
   private async alreadyRunningInstances() {
@@ -257,15 +312,25 @@ export class App {
     return instances;
   }
 
-  private async swapContainers(releaseId: string, instances: EC2Instance[]) {
+  private async swapContainers(
+    releaseId: string,
+    instances: EC2Instance[],
+    podsToDeploy: string[],
+  ) {
     const instanceIds = new Set(instances.map((i) => i.InstanceId));
     const asg = new AutoScaling({ region: this.config.region });
     const instancesForPod: Record<string, EC2Instance[]> = {};
 
     const updateResults = await Promise.allSettled(
       Object.entries(this.config.pods).map(async ([podName, podOptions]) => {
+        if (podsToDeploy.length > 0 && !podsToDeploy.includes(podName)) return; // Skip pod
+
+        if (podOptions.deploy.replaceWith !== "new-containers") {
+          return; // Nothing to do
+        }
+
         // If pod is part of ASG, check desired capacity before proceeding
-        if (!podOptions.networkInterfaceId) {
+        if (podOptions.autoscaling) {
           const asgName = `${this.config.stack}-${podName}`;
           const asgResult = await asg.describeAutoScalingGroups({
             AutoScalingGroupNames: [asgName],
@@ -300,21 +365,24 @@ export class App {
 
         const instances = describeResult.Reservations?.flatMap(
           (reservation) => reservation.Instances || [],
+        ).filter(
+          (instance) =>
+            instance.Tags?.find((tag) => tag.Key === "release")?.Value !==
+            releaseId, // Skip instances on the latest release already
         );
-        // .filter(
-        //   (instance) =>
-        //     instance.Tags?.find((tag) => tag.Key === "release")?.Value !==
-        //     releaseId, // Skip instances on the latest release already
-        // );
 
-        if (instances.length === 0 && podOptions.networkInterfaceId) {
-          console.error(
-            `No existing instances found for pod ${podName}, but desired capacity is > 0. Canceling deploy.`,
-          );
-          throw new Error(
-            `No existing instances found for pod ${podName}, but desired capacity is > 0`,
-          );
+        if (instances.length === 0) {
+          if (podOptions.singleton) {
+            console.error(
+              `No existing instances found for pod ${podName}, but desired capacity is > 0. Canceling deploy.`,
+            );
+            throw new Error(
+              `No existing instances found for pod ${podName}, but desired capacity is > 0`,
+            );
+          }
+          return; // No instances to swap containers on
         }
+
         // Filter down to instances that were already running, since new instances were likely created brand new by ASG itself
         instancesForPod[podName] = instances.filter(({ InstanceId }) =>
           instanceIds.has(InstanceId),
@@ -322,17 +390,12 @@ export class App {
 
         const composeContents = readFileSync(podOptions.compose).toString();
         await Promise.all(
-          instances.map(async ({ InstanceId, PrivateIpAddress: ip }) => {
+          instances.map(async ({ PrivateIpAddress: ip }) => {
             const startTime = Date.now();
             while (Date.now() - startTime < 120_000) {
               try {
                 const connectResult =
-                  await $`ssh -o LogLevel=ERROR -o StrictHostKeychecking=no -o UserKnownHostsFile=/dev/null -a ${HOST_USER}@${ip} bash -s < ${new Response(`
-  # Execute these commands on the remote server in a Bash shell
-  set -e -o pipefail
-  
-  echo Pulling containers on ${InstanceId} ${ip}
-  
+                  await $`ssh -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${HOST_USER}@${ip} bash -s < ${new Response(`
   ${generateDeployScript(this.config.stack, this.config, podName, releaseId, composeContents, this.allowedPodSecrets(podName))}
               `)}`;
                 if (connectResult.exitCode !== 0) {
@@ -378,13 +441,22 @@ export class App {
     // Swap all instances to start using the new containers
     const swapResults = await Promise.allSettled(
       Object.entries(this.config.pods).map(async ([podName, podOptions]) => {
+        if (podsToDeploy.length > 0 && !podsToDeploy.includes(podName)) return; // Skip pod
+
+        if (podOptions.deploy.replaceWith !== "new-containers") {
+          return; // Nothing to do
+        }
+
         const asgName = `${this.config.stack}-${podName}`;
 
         for (const {
           PrivateIpAddress: ip,
           InstanceId: instanceId,
         } of instancesForPod[podName]) {
-          if (podOptions.deploy.detachBeforeContainerSwap) {
+          if (
+            podOptions.autoscaling &&
+            podOptions.deploy.detachBeforeContainerSwap
+          ) {
             // Detach from ASG so that traffic from LB is not sent to the instance
             // Stop sending load balancer traffic to instance
             await asg.enterStandby({
@@ -421,23 +493,25 @@ export class App {
 
           // Swap the containers
           const connectResult =
-            await $`ssh -o LogLevel=ERROR -o StrictHostKeychecking=no -o UserKnownHostsFile=/dev/null -a ${HOST_USER}@${ip} bash -s < ${new Response(
+            await $`ssh -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${HOST_USER}@${ip} bash -s < ${new Response(
               `# Execute these commands on the remote server in a Bash shell
   set -e -o pipefail
 
-  echo Swapping containers on ${instanceId} ${ip}
-
   # Stop the current release if there is one
-  if [ -f /home/${HOST_USER}/releases/current ]; then
+  echo "Stopping containers on ${instanceId} ${ip} for current release $(cat /home/${HOST_USER}/releases/current)"
+  if [ -f /home/${HOST_USER}/releases/current ] && [ -d "$(cat /home/${HOST_USER}/releases/current)" ]; then
     cd "$(cat /home/${HOST_USER}/releases/current)"
-    docker compose down --timeout ${podOptions.deploy.shutdownTimeout} # Blocks until finished or timed out
+  fi
+  # Stop all pod containers if any are running
+  docker ps --quiet --all | xargs docker stop --time ${podOptions.deploy.shutdownTimeout}
+  docker ps --quiet --all | xargs docker rm --force --volumes
+  if [ -f docker-compose.yml ]; then
+    # Also remove any networks
+    docker compose down --volumes --timeout ${podOptions.deploy.shutdownTimeout} # Blocks until finished or timed out
   fi
 
   new_release_dir="/home/${HOST_USER}/releases/${releaseId}"
   cd "$new_release_dir" 
-
-  # Start the pod and wait for all containers to be healthy
-  docker compose up --detach --wait --wait-timeout 30 # If timeout exceeded, proceed. TODO: Abort deploy?
 
   # Update "current" location to point to the new release
   echo "$new_release_dir" > /home/${HOST_USER}/releases/current
@@ -445,9 +519,17 @@ export class App {
   # Update tags so we know which release this instance is currently on
   aws ec2 create-tags --tags "Key=release,Value=${releaseId}" "Key=Name,Value=${asgName}-${releaseId}" --resource "\$(cat /etc/instance-id)"
 
+  # Start up all pod containers
+  echo "Starting new containers on ${instanceId} ${ip} for new release ${releaseId}"
+  docker compose up --detach
+
+  # Delete old images + containers
+  docker system prune --force
+  
   # Clean up old releases 
+  echo "Deleting old release directories on ${instanceId} ${ip}"
   cd /home/${HOST_USER}
-  ls -I current releases | sort | head -n ${MAX_RELEASES_TO_KEEP} | xargs -I{} rm -rf releases/{}
+  ls -I current releases | sort | head -n -${MAX_RELEASES_TO_KEEP} | xargs --no-run-if-empty -I{} rm -rf releases/{}
           `,
             )}`;
           if (connectResult.exitCode !== 0) {
@@ -647,10 +729,6 @@ export class App {
 
     const releaseId = release || this.generateReleaseId();
 
-    const deployStartTime = Date.now();
-
-    const secretsConfig = this.config.secrets || {};
-
     const app = new CdkApp({ outdir: CDK_OUT_DIR });
     const stack = new DeployStack(app, this.config.stack, (stack) => {
       new S3Backend(stack, {
@@ -790,7 +868,7 @@ export class App {
         });
 
         const allowedPodSecrets = this.allowedPodSecrets(podName);
-        const anySecrets = allowedPodSecrets.length > 0;
+        const anySecrets = Object.keys(allowedPodSecrets).length > 0;
 
         new IamRolePolicyAttachment(stack, `${fullPodName}-policy-attachment`, {
           role: podRole.name,
@@ -831,7 +909,7 @@ export class App {
                     ],
                     effect: anySecrets ? "Allow" : "Deny",
                     resources: anySecrets
-                      ? allowedPodSecrets.map(
+                      ? Object.keys(allowedPodSecrets).map(
                           (secretName) =>
                             `arn:aws:secretsmanager:${this.config.region}:${callerIdentity.accountId}:secret:${secretName}-*`,
                         )
@@ -928,38 +1006,47 @@ export class App {
         for (const [endpointName, endpointOptions] of Object.entries(
           podOptions.endpoints || {},
         )) {
-          new vpcSecurityGroupIngressRule.VpcSecurityGroupIngressRule(
-            stack,
-            `${fullPodName}-ingress-${endpointName}-ipv4`,
-            {
-              securityGroupId: podSg.id,
-              ipProtocol: "tcp",
-              fromPort: endpointOptions.target.port,
-              toPort: endpointOptions.target.port,
-              cidrIpv4: "10.0.0.0/8",
-              tags: {
-                name: `${fullPodName}-ingress-${endpointName}-ipv4`,
-                stack: this.config.stack,
-                pod: podName,
+          for (const ipProtocol of ["tcp", "udp"]) {
+            if (
+              !endpointOptions.target.protocol.includes(
+                ipProtocol.toUpperCase(),
+              )
+            )
+              continue;
+
+            new vpcSecurityGroupIngressRule.VpcSecurityGroupIngressRule(
+              stack,
+              `${fullPodName}-ingress-${endpointName}-ipv4-${ipProtocol}`,
+              {
+                securityGroupId: podSg.id,
+                ipProtocol,
+                fromPort: endpointOptions.target.port,
+                toPort: endpointOptions.target.port,
+                cidrIpv4: endpointOptions.public ? "0.0.0.0/0" : "10.0.0.0/8",
+                tags: {
+                  name: `${fullPodName}-ingress-${endpointName}-ipv4-${ipProtocol}`,
+                  stack: this.config.stack,
+                  pod: podName,
+                },
               },
-            },
-          );
-          new vpcSecurityGroupIngressRule.VpcSecurityGroupIngressRule(
-            stack,
-            `${fullPodName}-ingress-${endpointName}-ipv6`,
-            {
-              securityGroupId: podSg.id,
-              ipProtocol: "tcp",
-              fromPort: endpointOptions.target.port,
-              toPort: endpointOptions.target.port,
-              cidrIpv6: vpc.ipv6CidrBlock,
-              tags: {
-                name: `${fullPodName}-ingress-${endpointName}-ipv6`,
-                stack: this.config.stack,
-                pod: podName,
+            );
+            new vpcSecurityGroupIngressRule.VpcSecurityGroupIngressRule(
+              stack,
+              `${fullPodName}-ingress-${endpointName}-ipv6-${ipProtocol}`,
+              {
+                securityGroupId: podSg.id,
+                ipProtocol,
+                fromPort: endpointOptions.target.port,
+                toPort: endpointOptions.target.port,
+                cidrIpv6: endpointOptions.public ? "::/0" : vpc.ipv6CidrBlock,
+                tags: {
+                  name: `${fullPodName}-ingress-${endpointName}-ipv6-${ipProtocol}`,
+                  stack: this.config.stack,
+                  pod: podName,
+                },
               },
-            },
-          );
+            );
+          }
 
           // Don't need to create target group or listeners if there's no load balancer associated
           if (!endpointOptions.loadBalancer) continue;
@@ -1062,15 +1149,18 @@ export class App {
 
             networkInterfaces: [
               {
-                networkInterfaceId: podOptions.networkInterfaceId,
-                deleteOnTermination:
-                  (!podOptions.networkInterfaceId).toString(),
-                associatePublicIpAddress: podOptions.networkInterfaceId
+                networkInterfaceId: podOptions.singleton.networkInterfaceId,
+                deleteOnTermination: (!podOptions.singleton
+                  .networkInterfaceId).toString(),
+                associatePublicIpAddress: podOptions.singleton
+                  .networkInterfaceId
                   ? undefined
                   : (!!podOptions.publicIp).toString(),
                 // Don't add IPv6 addresses if we're using a reusable ENI
-                ipv6AddressCount: podOptions.networkInterfaceId ? undefined : 1,
-                securityGroups: podOptions.networkInterfaceId
+                ipv6AddressCount: podOptions.singleton.networkInterfaceId
+                  ? undefined
+                  : 1,
+                securityGroups: podOptions.singleton.networkInterfaceId
                   ? undefined
                   : [podSg.id],
               },
@@ -1118,10 +1208,15 @@ su ${HOST_USER} /home/${HOST_USER}/init.sh
 echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
   `,
             ).toString("base64"),
+
+            lifecycle: {
+              // Ignore further changes since the launch template only matters on initial creation
+              ignoreChanges: ["tag_specifications", "user_data"],
+            },
           },
         );
 
-        if (podOptions.networkInterfaceId) {
+        if (podOptions.singleton) {
           // Can't use ASG with a pre-specified ENI since ASGs assign ENIs directly
           // so we create the instance directly
           const instance = new Instance(stack, `${fullPodName}-singleton`, {
@@ -1131,18 +1226,15 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
             maintenanceOptions: {
               autoRecovery: "default",
             },
-            tags: {
-              Name: `${fullPodName}-${releaseId}`, // Purely for visual in AWS console, no functional purpose
-              stack: this.config.stack,
-              pod: podName,
-              release: releaseId,
+            lifecycle: {
+              ignoreChanges: ["tags", "user_data"],
             },
           });
           new NetworkInterfaceSgAttachment(
             stack,
             `${fullPodName}-sg-attachment`,
             {
-              networkInterfaceId: podOptions.networkInterfaceId,
+              networkInterfaceId: podOptions.singleton.networkInterfaceId,
               securityGroupId: podSg.id,
             },
           );
@@ -1154,11 +1246,12 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
             desiredCapacity: 1,
             defaultInstanceWarmup: 60, // Give 1 minute for the instance to start up, download containers, and start before including in CloudWatch metrics
             defaultCooldown: 0, // Don't wait between scaling actions
-            healthCheckGracePeriod: podOptions.healthCheckGracePeriod,
+            healthCheckGracePeriod:
+              podOptions.autoscaling.healthCheckGracePeriod,
             healthCheckType: Object.keys(podOptions.endpoints || {}).length
               ? "ELB"
               : "EC2",
-            waitForCapacityTimeout: `${podOptions.healthCheckGracePeriod}s`,
+            waitForCapacityTimeout: `${podOptions.autoscaling.healthCheckGracePeriod}s`,
 
             trafficSource: Object.values(tgs).map((tg) => ({
               identifier: tg.arn,
@@ -1173,18 +1266,20 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
             terminationPolicies: ["OldestLaunchTemplate"],
 
             instanceMaintenancePolicy: {
-              minHealthyPercentage: podOptions.minHealthyPercentage,
-              maxHealthyPercentage: podOptions.maxHealthyPercentage,
+              minHealthyPercentage: podOptions.autoscaling.minHealthyPercentage,
+              maxHealthyPercentage: podOptions.autoscaling.maxHealthyPercentage,
             },
-            waitForElbCapacity: podOptions.minHealthyInstances,
+            waitForElbCapacity: podOptions.autoscaling.minHealthyInstances,
 
             instanceRefresh:
               podOptions.deploy.replaceWith === "new-instances"
                 ? {
                     strategy: "Rolling",
                     preferences: {
-                      minHealthyPercentage: podOptions.minHealthyPercentage,
-                      maxHealthyPercentage: podOptions.maxHealthyPercentage,
+                      minHealthyPercentage:
+                        podOptions.autoscaling.minHealthyPercentage,
+                      maxHealthyPercentage:
+                        podOptions.autoscaling.maxHealthyPercentage,
                       autoRollback: true,
                       scaleInProtectedInstances: "Wait",
                       standbyInstances: "Wait",
@@ -1252,17 +1347,21 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
   }
 
   private allowedPodSecrets(podName: string) {
-    const allowedSecrets = [];
+    const allowedSecrets: Record<string, string> = {};
     for (const [secretName, secretOptions] of Object.entries(
       this.config.secrets || {},
     )) {
       if (
-        (secretOptions.podsIncluded?.length &&
-          secretOptions.podsIncluded?.includes(podName)) ||
-        (secretOptions.podsExcluded?.length &&
-          !secretOptions.podsExcluded?.includes(podName))
+        Array.isArray(secretOptions.podsIncluded) &&
+        secretOptions.podsIncluded?.length &&
+        secretOptions.podsIncluded?.includes(podName)
       ) {
-        allowedSecrets.push(secretName);
+        allowedSecrets[secretName] = secretName; // Map to the same name
+      } else if (
+        typeof secretOptions.podsIncluded === "object" &&
+        secretOptions.podsIncluded[podName] !== undefined
+      ) {
+        allowedSecrets[secretName] = secretOptions.podsIncluded[podName]; // Map secret name
       }
     }
     return allowedSecrets;

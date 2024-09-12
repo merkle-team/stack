@@ -1,4 +1,4 @@
-import { parse as parseYaml } from "yaml";
+import { parseDocument } from "yaml";
 import { readFileSync } from "fs";
 import path from "path";
 import { Type, type Static } from "@sinclair/typebox";
@@ -13,12 +13,10 @@ export const DeployConfigSchema = Type.Object({
     Type.Record(
       Type.String(),
       Type.Object({
-        podsIncluded: Type.Optional(
+        podsIncluded: Type.Union([
           Type.Array(Type.String(), { uniqueItems: true }),
-        ),
-        podsExcluded: Type.Optional(
-          Type.Array(Type.String(), { uniqueItems: true }),
-        ),
+          Type.Record(Type.String(), Type.String()),
+        ]),
       }),
     ),
   ),
@@ -42,9 +40,15 @@ export const DeployConfigSchema = Type.Object({
     Type.String(),
     Type.Object({
       environment: Type.Optional(
-        Type.Array(Type.String({ pattern: "^[A-Z0-9_]+$" }), {
-          uniqueItems: true,
-        }),
+        Type.Union([
+          Type.Record(
+            Type.String(),
+            Type.Union([Type.String(), Type.Undefined(), Type.Null()]),
+          ),
+          Type.Array(Type.String({ pattern: "^[A-Z0-9_]+$" }), {
+            uniqueItems: true,
+          }),
+        ]),
       ),
 
       image: Type.String({ pattern: "^ami-[a-f0-9]+$" }),
@@ -55,24 +59,36 @@ export const DeployConfigSchema = Type.Object({
 
       compose: Type.String(),
 
-      networkInterfaceId: Type.Optional(Type.TemplateLiteral("eni-${string}")),
+      singleton: Type.Optional(
+        Type.Object({
+          networkInterfaceId: Type.Optional(
+            Type.TemplateLiteral("eni-${string}"),
+          ),
+        }),
+      ),
 
-      healthCheckGracePeriod: Type.Integer({ minimum: 0 }),
-      minHealthyPercentage: Type.Integer({ minimum: 0 }),
-      maxHealthyPercentage: Type.Integer({ minimum: 100, maximum: 200 }),
-      minHealthyInstances: Type.Integer({ minimum: 0 }),
-      onDemandBaseCapacity: Type.Integer({ minimum: 0 }),
-      onDemandPercentageAboveBaseCapacity: Type.Integer({
-        minimum: 0,
-        maximum: 100,
-      }),
+      autoscaling: Type.Optional(
+        Type.Object({
+          healthCheckGracePeriod: Type.Integer({ minimum: 0 }),
+          minHealthyPercentage: Type.Integer({ minimum: 0 }),
+          maxHealthyPercentage: Type.Integer({ minimum: 100, maximum: 200 }),
+          minHealthyInstances: Type.Integer({ minimum: 0 }),
+          onDemandBaseCapacity: Type.Integer({ minimum: 0 }),
+          onDemandPercentageAboveBaseCapacity: Type.Integer({
+            minimum: 0,
+            maximum: 100,
+          }),
+        }),
+      ),
 
       deploy: Type.Object({
         replaceWith: Type.Union([
           Type.Literal("new-instances"),
           Type.Literal("new-containers"),
         ]),
-        detachBeforeContainerSwap: Type.Boolean({ default: true }),
+        detachBeforeContainerSwap: Type.Optional(
+          Type.Boolean({ default: true }),
+        ),
         shutdownTimeout: Type.Integer({ minimum: 0 }),
       }),
 
@@ -95,6 +111,7 @@ export const DeployConfigSchema = Type.Object({
                 cert: Type.String(),
               }),
             ),
+            public: Type.Optional(Type.Boolean({ default: false })),
             target: Type.Object({
               port: Type.Integer({ minimum: 1, maximum: 65535 }),
               protocol: Type.Union([
@@ -140,10 +157,12 @@ export const DeployConfigSchema = Type.Object({
   network: Type.Object({
     id: Type.String({ pattern: "^vpc-[a-f0-9]+$" }),
 
-    subnets: Type.Object({
-      public: Type.Array(Type.String({ pattern: "^subnet-[a-f0-9]+$" })),
-      private: Type.Array(Type.String({ pattern: "^subnet-[a-f0-9]+$" })),
-    }),
+    subnets: Type.Optional(
+      Type.Object({
+        public: Type.Array(Type.String({ pattern: "^subnet-[a-f0-9]+$" })),
+        private: Type.Array(Type.String({ pattern: "^subnet-[a-f0-9]+$" })),
+      }),
+    ),
   }),
 });
 
@@ -157,7 +176,10 @@ function extractErrors(iterator) {
 }
 
 export function parseConfig(configPath: string) {
-  let config: DeployConfig = parseYaml(readFileSync(configPath).toString());
+  let config: DeployConfig = parseDocument(
+    readFileSync(configPath).toString(),
+    { merge: true },
+  ).toJSON();
   const configErrors = extractErrors(DEPLOY_CONFIG_COMPILER.Errors(config));
   if (configErrors?.length) {
     for (const error of configErrors) {
@@ -172,33 +194,20 @@ export function parseConfig(configPath: string) {
   for (const [secretName, secretConfig] of Object.entries(
     config.secrets || {},
   )) {
-    if (secretConfig.podsIncluded && secretConfig.podsExcluded) {
-      throw new Error(
-        `Secret ${secretName} cannot define both podsIncluded and podsExcluded--pick one or the other`,
-      );
-    }
-
-    if (!secretConfig.podsIncluded && !secretConfig.podsExcluded) {
-      throw new Error(
-        `Secret ${secretName} must specify one of podsIncluded or podsExcluded`,
-      );
-    }
-
-    if (secretConfig.podsIncluded?.length) {
+    if (Array.isArray(secretConfig.podsIncluded)) {
       for (const podName of secretConfig.podsIncluded) {
         if (!config.pods[podName]) {
           throw new Error(
-            `Secret ${secretName} allows access to pod ${podName} which does not exist`,
+            `Secret ${secretName} exposed to pod ${podName}, which does not exist`,
           );
         }
       }
-    }
-
-    if (secretConfig.podsExcluded?.length) {
-      for (const podName of secretConfig.podsExcluded) {
+    } else if (typeof secretConfig.podsIncluded === "object") {
+      // If an object is provided, treat each key as the pod name and each value as the environment variable name mapping
+      for (const podName of Object.keys(secretConfig.podsIncluded)) {
         if (!config.pods[podName]) {
           throw new Error(
-            `Secret ${secretName} prevents access to pod ${podName} which does not exist`,
+            `Secret ${secretName} exposed to pod ${podName}, which does not exist`,
           );
         }
       }
@@ -210,6 +219,18 @@ export function parseConfig(configPath: string) {
       path.dirname(configPath),
       podConfig.compose,
     );
+
+    if (podConfig.singleton) {
+      if (podConfig.autoscaling) {
+        throw new Error(
+          `Pod ${podName} cannot specify both singleton and autoscaling options -- they are mutually exclusive`,
+        );
+      }
+    } else if (!podConfig.autoscaling) {
+      throw new Error(
+        `Pod ${podName} must specify autoscaling options -- specify singleton if you want a single instance`,
+      );
+    }
 
     const result = Bun.spawnSync([
       "docker",
