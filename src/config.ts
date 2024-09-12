@@ -122,31 +122,35 @@ export const DeployConfigSchema = Type.Object({
                 Type.Literal("TCP_UDP"),
                 Type.Literal("TLS"),
               ]),
-              deregistration: Type.Object({
-                delay: Type.Integer({ minimum: 0 }),
-                action: Type.Optional(
-                  Type.Union(
-                    [
-                      Type.Literal("do-nothing"),
-                      Type.Literal("force-terminate-connection"),
-                    ],
-                    { default: "do-nothing" },
+              deregistration: Type.Optional(
+                Type.Object({
+                  delay: Type.Integer({ minimum: 0 }),
+                  action: Type.Optional(
+                    Type.Union(
+                      [
+                        Type.Literal("do-nothing"),
+                        Type.Literal("force-terminate-connection"),
+                      ],
+                      { default: "do-nothing" },
+                    ),
                   ),
-                ),
-              }),
-              healthCheck: Type.Object({
-                path: Type.Optional(Type.String()),
-                successCodes: Type.Optional(
-                  Type.Union([
-                    Type.Integer({ minimum: 200, maximum: 599 }),
-                    Type.String(),
-                  ]),
-                ),
-                healthyThreshold: Type.Integer({ minimum: 1 }),
-                unhealthyThreshold: Type.Integer({ minimum: 1 }),
-                timeout: Type.Integer({ minimum: 1 }),
-                interval: Type.Integer({ minimum: 5 }),
-              }),
+                }),
+              ),
+              healthCheck: Type.Optional(
+                Type.Object({
+                  path: Type.Optional(Type.String()),
+                  successCodes: Type.Optional(
+                    Type.Union([
+                      Type.Integer({ minimum: 200, maximum: 599 }),
+                      Type.String(),
+                    ]),
+                  ),
+                  healthyThreshold: Type.Integer({ minimum: 1 }),
+                  unhealthyThreshold: Type.Integer({ minimum: 1 }),
+                  timeout: Type.Integer({ minimum: 1 }),
+                  interval: Type.Integer({ minimum: 5 }),
+                }),
+              ),
             }),
           }),
         ),

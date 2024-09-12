@@ -82,7 +82,8 @@ if [ ! -d /home/${HOST_USER}/releases/${releaseId} ]; then
   echo "\$INSTANCE_ID" | sudo tee /etc/instance-id > /dev/null
   sudo chmod 444 /etc/instance-id
   echo "INSTANCE_MARKET=\$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-life-cycle)" >> .static.env
-  echo "PRIVATE_IPV4=\$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)" >> .static.env
+  private_ipv4="\$(curl -sf -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)"
+  echo "PRIVATE_IPV4=\$private_ipv4" >> .static.env
   public_ipv4="\$(curl -sf -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 || echo "")"
   if [ -n "\$public_ipv4" ]; then
     echo "PUBLIC_IPV4=\$public_ipv4" >> .static.env
@@ -125,7 +126,7 @@ if [ ! -d /home/${HOST_USER}/releases/${releaseId} ]; then
     # Instance was already deployed to, so there's currently containers running.
     # Download/build any images we need to in preparation for the switchover (blocks until finished)
 
-    echo "Downloading and preparing Docker images before swapping containers"
+    echo "Downloading and preparing Docker images on \$INSTANCE_ID \$private_ipv4 before swapping containers"
     docker compose build --pull
   else 
     # Sometimes necessary to avoid weird errors on first boot
@@ -190,6 +191,12 @@ export class App {
   }
 
   public async deploy(podsToDeploy: string[]) {
+    if (this.options.applyOnly && this.options.skipApply) {
+      throw new Error(
+        "Cannot specify --apply-only and --skip-apply as they are mutually exclusive",
+      );
+    }
+
     const release = this.generateReleaseId();
 
     this.parseConfig(); // Need this so `this.config` is set
@@ -226,7 +233,9 @@ export class App {
     }
 
     // Get current instances before making any changes
-    const alreadyRunningInstances = await this.alreadyRunningInstances();
+    const alreadyRunningInstances = this.options.applyOnly
+      ? []
+      : await this.alreadyRunningInstances();
 
     if (!this.options.skipApply) {
       if (podsToDeploy.length > 0) {
@@ -257,7 +266,7 @@ export class App {
         const answers = await inquirer.prompt([
           {
             name: "proceed",
-            message: "Apply infra changes and then proceed with deploy?",
+            message: `Apply infra changes${this.options.applyOnly ? "" : " and then proceed with deploy"}?`,
           },
         ]);
 
@@ -281,7 +290,7 @@ export class App {
     }
 
     // Only perform a swap if there are already running instances.
-    if (alreadyRunningInstances.length) {
+    if (!this.options.applyOnly && alreadyRunningInstances.length) {
       await this.swapContainers(release, alreadyRunningInstances, podsToDeploy);
     }
 
@@ -1008,11 +1017,18 @@ export class App {
         )) {
           for (const ipProtocol of ["tcp", "udp"]) {
             if (
-              !endpointOptions.target.protocol.includes(
-                ipProtocol.toUpperCase(),
+              ipProtocol === "tcp" &&
+              !["HTTP", "HTTPS", "TCP", "TCP_UDP", "TLS"].includes(
+                endpointOptions.target.protocol,
               )
-            )
+            ) {
               continue;
+            } else if (
+              ipProtocol === "udp" &&
+              !["UDP", "TCP_UDP"].includes(endpointOptions.target.protocol)
+            ) {
+              continue;
+            }
 
             new vpcSecurityGroupIngressRule.VpcSecurityGroupIngressRule(
               stack,

@@ -30,6 +30,7 @@ program
     "Skip the apply step (faster for swap container deploys)",
     false,
   )
+  .option("--apply-only", "Skip the deploy step after the apply", false)
   .action(async (pods, options) => {
     const app = new App({ ...program.opts(), ...options });
     await app.deploy(pods);
