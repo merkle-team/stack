@@ -105,6 +105,7 @@ if [ ! -d /home/${HOST_USER}/releases/${releaseId} ]; then
 
   # Replace envar names with mapped names for this pod
   ${Object.entries(secretNameMappings)
+    .filter(([secretName, mappedName]) => secretName !== mappedName)
     .map(
       ([secretName, mappedName]) =>
         `sed -i.bak "s/^${secretName}=/${mappedName}=/" .pod.env`,
@@ -112,25 +113,20 @@ if [ ! -d /home/${HOST_USER}/releases/${releaseId} ]; then
     .join("\n")}
   rm .pod.env.bak
 
-  # Append instance environment variables
   cat .static.env > .env
-  echo "" >> .env # Add newline in case newlines are missing from the end of the file
+  echo "" >> .env
   cat .pod.env >> .env
   chmod 400 .env
   rm .static.env .pod.env
 
-  # Convert compose file into base64 so we don't interpolate environment variables
   echo "${Buffer.from(composeContents).toString("base64")}" | base64 -d > docker-compose.yml
 
   if [ -f /home/${HOST_USER}/releases/current ]; then
-    # Instance was already deployed to, so there's currently containers running.
-    # Download/build any images we need to in preparation for the switchover (blocks until finished)
-
+    # Instance was already deployed to
     echo "Downloading and preparing Docker images on \$INSTANCE_ID \$private_ipv4 before swapping containers"
     docker compose build --pull
   else 
-    # Sometimes necessary to avoid weird errors on first boot
-    # See https://github.com/moby/moby/issues/22074#issuecomment-856551466
+    # Avoid weird errors on first boot; see https://github.com/moby/moby/issues/22074#issuecomment-856551466
     sudo systemctl restart docker
 
     echo "Starting Docker containers $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
