@@ -97,8 +97,7 @@ if [ ! -d /home/${HOST_USER}/releases/${releaseId} ]; then
   # Write current values of environment variables current set for this pod
   echo "# Pod environment variables (can change with each deploy)" > .pod.env
   echo "${Buffer.from(generateEnvVarsForPod(config, pod)).toString("base64")}" | base64 -d >> .pod.env
-  echo "" >> .pod.env # Ensure newline between envars and secrets
-  # Write secrets this instance currently has access to
+  echo "" >> .pod.env 
   # TODO: Handle case where there are more than 100 secrets
   aws secretsmanager batch-get-secret-value --secret-id-list ${Object.keys(secretNameMappings).join(" ")} --output json | jq -r '.SecretValues[] | .Name + "=" + .SecretString' >> .pod.env
   chmod 400 .pod.env
@@ -130,9 +129,6 @@ if [ ! -d /home/${HOST_USER}/releases/${releaseId} ]; then
     sudo systemctl restart docker
 
     echo "Starting Docker containers $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
-
-    # Otherwise, no containers are running so start them up now
-    # Will wait forever until all containers running/healthy
     docker compose up --detach
 
     echo "Finished starting Docker containers $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
@@ -1197,14 +1193,11 @@ export class App {
               },
             ],
 
+            // Executed by cloud-init when the instance starts up
             userData: Buffer.from(
               `#!/bin/bash
-# These commands are executed by cloud-init when the instance starts up
 set -e -o pipefail
 
-# Run any other custom pre-initialization as root.
-# Must happen before base initialization below since we might need to mount volumes
-# that are used by the base initialization script.
 cd /home/${HOST_USER}
 echo "${Buffer.from(podOptions.initScript ? readFileSync(podOptions.initScript).toString() : "#/bin/bash\n# No script specified in this deploy configuration's initScript\n").toString("base64")}" | base64 -d > before-init.sh
 chmod +x before-init.sh
@@ -1215,7 +1208,6 @@ echo "Finished before-init script $(cat /proc/uptime | awk '{ print $1 }') secon
 echo "${Buffer.from(generateDeployScript(this.config.stack, this.config, podName, releaseId, composeContents, allowedPodSecrets)).toString("base64")}" | base64 -d > init.sh
 chmod +x init.sh
 echo "Starting init script $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
-# Execute as host user so that created file permissions are correct
 su ${HOST_USER} /home/${HOST_USER}/init.sh
 echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
   `,
