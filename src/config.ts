@@ -1,13 +1,24 @@
 import { parseDocument } from "yaml";
 import { readFileSync } from "fs";
-import path from "path";
+import { dirname, resolve } from "path";
 import { Type, type Static } from "@sinclair/typebox";
 import { TypeCompiler } from "@sinclair/typebox/compiler";
 import { Value } from "@sinclair/typebox/value";
 
 export const DeployConfigSchema = Type.Object({
-  stack: Type.String(),
-  region: Type.Optional(Type.String({ default: "us-east-1" })),
+  project: Type.String(),
+  region: Type.String({ default: "us-east-1" }),
+
+  network: Type.Object({
+    id: Type.String({ pattern: "^vpc-[a-f0-9]+$" }),
+
+    subnets: Type.Optional(
+      Type.Object({
+        public: Type.Array(Type.String({ pattern: "^subnet-[a-f0-9]+$" })),
+        private: Type.Array(Type.String({ pattern: "^subnet-[a-f0-9]+$" })),
+      }),
+    ),
+  }),
 
   secrets: Type.Optional(
     Type.Record(
@@ -52,6 +63,7 @@ export const DeployConfigSchema = Type.Object({
       ),
 
       image: Type.String({ pattern: "^ami-[a-f0-9]+$" }),
+      sshUser: Type.Optional(Type.String({ default: "ec2-user" })),
       instanceType: Type.String(),
       publicIp: Type.Optional(Type.Boolean()),
 
@@ -61,6 +73,7 @@ export const DeployConfigSchema = Type.Object({
 
       singleton: Type.Optional(
         Type.Object({
+          subnet: Type.Optional(Type.String({ pattern: "^subnet-[a-f0-9]+$" })),
           networkInterfaceId: Type.Optional(
             Type.TemplateLiteral("eni-${string}"),
           ),
@@ -69,6 +82,7 @@ export const DeployConfigSchema = Type.Object({
 
       autoscaling: Type.Optional(
         Type.Object({
+          subnetIds: Type.Optional(Type.Array(Type.String())),
           healthCheckGracePeriod: Type.Integer({ minimum: 0 }),
           minHealthyPercentage: Type.Integer({ minimum: 0 }),
           maxHealthyPercentage: Type.Integer({ minimum: 100, maximum: 200 }),
@@ -157,17 +171,6 @@ export const DeployConfigSchema = Type.Object({
       ),
     }),
   ),
-
-  network: Type.Object({
-    id: Type.String({ pattern: "^vpc-[a-f0-9]+$" }),
-
-    subnets: Type.Optional(
-      Type.Object({
-        public: Type.Array(Type.String({ pattern: "^subnet-[a-f0-9]+$" })),
-        private: Type.Array(Type.String({ pattern: "^subnet-[a-f0-9]+$" })),
-      }),
-    ),
-  }),
 });
 
 const DEPLOY_CONFIG_COMPILER = TypeCompiler.Compile(DeployConfigSchema);
@@ -219,10 +222,7 @@ export function parseConfig(configPath: string) {
   }
 
   for (const [podName, podConfig] of Object.entries(config.pods)) {
-    podConfig.compose = path.resolve(
-      path.dirname(configPath),
-      podConfig.compose,
-    );
+    podConfig.compose = resolve(dirname(configPath), podConfig.compose);
 
     if (podConfig.singleton) {
       if (podConfig.autoscaling) {
