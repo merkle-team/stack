@@ -11,7 +11,7 @@ export function generateDeployScript(
   podOptions: DeployConfig["pods"][string],
   releaseId: string,
   composeContents: string,
-  secretNameMappings: Record<string, string>,
+  secretNameMappings: Record<string, string>
 ) {
   const sshUser = podOptions.sshUser;
 
@@ -51,10 +51,16 @@ if [ ! -d /home/${sshUser}/releases/${releaseId} ]; then
 
   # Write current values of environment variables current set for this pod
   echo "# Pod environment variables (can change with each deploy)" > .pod.env
-  echo "${stringToBase64(generateEnvVarsForPod(podOptions))}" | base64 -d >> .pod.env
+  echo "${stringToBase64(
+    generateEnvVarsForPod(podOptions)
+  )}" | base64 -d >> .pod.env
   echo "" >> .pod.env 
   # TODO: Handle case where there are more than 100 secrets
-  aws secretsmanager batch-get-secret-value --secret-id-list ${Object.keys(secretNameMappings).join(" ")} --output json | jq -r '.SecretValues[] | .Name + "=" + .SecretString' >> .pod.env
+  aws secretsmanager batch-get-secret-value --secret-id-list ${Object.keys(
+    secretNameMappings
+  ).join(
+    " "
+  )} --output json | jq -r '.SecretValues[] | .Name + "=" + .SecretString' >> .pod.env
   chmod 400 .pod.env
 
   # Replace envar names with mapped names for this pod
@@ -62,7 +68,7 @@ if [ ! -d /home/${sshUser}/releases/${releaseId} ]; then
     .filter(([secretName, mappedName]) => secretName !== mappedName)
     .map(
       ([secretName, mappedName]) =>
-        `sed -i.bak "s/^${secretName}=/${mappedName}=/" .pod.env`,
+        `sed -i.bak "s/^${secretName}=/${mappedName}=/" .pod.env`
     )
     .join("\n")}
   rm .pod.env.bak
@@ -105,11 +111,11 @@ function generateEnvVarsForPod(podOptions: DeployConfig["pods"][string]) {
       .map(([envName, envValue]) =>
         envValue === undefined || envValue === null
           ? `${envName}=${process.env[envName]}`
-          : `${envName}=${envValue}`,
+          : `${envName}=${envValue}`
       )
       .join("\n");
     return podEnvVars;
   }
 
-  return '';
+  return "";
 }

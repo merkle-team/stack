@@ -46,7 +46,7 @@ export class LoadBalancerStack extends TerraformStack {
 
     if (options.idleTimeout !== undefined && options.type !== "application") {
       throw new Error(
-        `Load balancer ${options.shortName} has an idle-timeout specified, but is not an application load balancer`,
+        `Load balancer ${options.shortName} has an idle-timeout specified, but is not an application load balancer`
       );
     }
 
@@ -65,7 +65,7 @@ export class LoadBalancerStack extends TerraformStack {
         securityGroupId: lbSg.securityGroupId,
         ipProtocol: "-1",
         cidrIpv4: "0.0.0.0/0",
-      },
+      }
     );
     new VpcSecurityGroupIngressRule(
       this,
@@ -74,7 +74,7 @@ export class LoadBalancerStack extends TerraformStack {
         securityGroupId: lbSg.securityGroupId,
         ipProtocol: "-1",
         cidrIpv6: "::/0",
-      },
+      }
     );
 
     // Allow egress to anywhere
@@ -85,7 +85,7 @@ export class LoadBalancerStack extends TerraformStack {
         securityGroupId: lbSg.securityGroupId,
         ipProtocol: "-1",
         cidrIpv4: "0.0.0.0/0",
-      },
+      }
     );
     new VpcSecurityGroupEgressRule(
       this,
@@ -94,7 +94,7 @@ export class LoadBalancerStack extends TerraformStack {
         securityGroupId: lbSg.securityGroupId,
         ipProtocol: "-1",
         cidrIpv6: "::/0",
-      },
+      }
     );
 
     this.lb = new Lb(this, uniqueLbName, {

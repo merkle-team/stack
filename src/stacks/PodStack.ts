@@ -92,7 +92,7 @@ export class PodStack extends TerraformStack {
               ],
             },
           ],
-        },
+        }
       ).json,
     });
 
@@ -139,7 +139,7 @@ export class PodStack extends TerraformStack {
                 resources: anySecrets
                   ? Object.keys(options.secretMappings).map(
                       (secretName) =>
-                        `arn:aws:secretsmanager:${options.region}:${callerIdentity.accountId}:secret:${secretName}-*`,
+                        `arn:aws:secretsmanager:${options.region}:${callerIdentity.accountId}:secret:${secretName}-*`
                     )
                   : ["*"],
               },
@@ -167,7 +167,7 @@ export class PodStack extends TerraformStack {
                 resources: ["*"], // Above conditions limit this to instance's own tags
               },
             ],
-          },
+          }
         ).json,
       }).arn,
     });
@@ -209,13 +209,13 @@ export class PodStack extends TerraformStack {
 
     const tgs: Record<string, LbTargetGroup> = {};
     for (const [endpointName, endpointOptions] of Object.entries(
-      podOptions.endpoints || {},
+      podOptions.endpoints || {}
     )) {
       for (const ipProtocol of ["tcp", "udp"]) {
         if (
           ipProtocol === "tcp" &&
           !["HTTP", "HTTPS", "TCP", "TCP_UDP", "TLS"].includes(
-            endpointOptions.target.protocol,
+            endpointOptions.target.protocol
           )
         ) {
           continue;
@@ -239,7 +239,7 @@ export class PodStack extends TerraformStack {
               Name: `${fullPodName}-ingress-${endpointName}-ipv4-${ipProtocol}`,
               pod: options.shortName,
             },
-          },
+          }
         );
         new VpcSecurityGroupIngressRule(
           this,
@@ -254,7 +254,7 @@ export class PodStack extends TerraformStack {
               Name: `${fullPodName}-ingress-${endpointName}-ipv6-${ipProtocol}`,
               pod: options.shortName,
             },
-          },
+          }
         );
       }
 
@@ -272,7 +272,8 @@ export class PodStack extends TerraformStack {
           endpointOptions.target.deregistration?.action ===
           "force-terminate-connection",
         healthCheck: {
-          healthyThreshold: endpointOptions.target.healthCheck?.healthyThreshold,
+          healthyThreshold:
+            endpointOptions.target.healthCheck?.healthyThreshold,
           unhealthyThreshold:
             endpointOptions.target.healthCheck?.unhealthyThreshold,
           matcher: endpointOptions.target.healthCheck?.successCodes?.toString(),
@@ -292,7 +293,7 @@ export class PodStack extends TerraformStack {
           statuses: ["ISSUED"],
           types: ["AMAZON_ISSUED"],
           mostRecent: true,
-        },
+        }
       );
 
       new LbListener(this, `${fullPodName}-${endpointName}-listener`, {
@@ -325,7 +326,7 @@ export class PodStack extends TerraformStack {
         tags: {
           pod: options.shortName,
         },
-      },
+      }
     );
 
     const lt = new LaunchTemplate(this, `${fullPodName}-lt`, {
@@ -349,7 +350,8 @@ export class PodStack extends TerraformStack {
       networkInterfaces: [
         {
           networkInterfaceId: podOptions.singleton?.networkInterfaceId,
-          deleteOnTermination: (!podOptions.singleton?.networkInterfaceId).toString(),
+          deleteOnTermination: (!podOptions.singleton
+            ?.networkInterfaceId).toString(),
           associatePublicIpAddress: podOptions.singleton?.networkInterfaceId
             ? undefined
             : (!!podOptions.publicIp).toString(),
@@ -383,24 +385,39 @@ export class PodStack extends TerraformStack {
 
       // Executed by cloud-init when the instance starts up
       // Use `sensitive` to hide massive base64 blob in diffs
-      userData: Fn.sensitive(stringToBase64(
-        `#!/bin/bash
+      userData: Fn.sensitive(
+        stringToBase64(
+          `#!/bin/bash
 set -e -o pipefail
 
 cd /home/${podOptions.sshUser}
-echo "${stringToBase64(podOptions.initScript ? readFileSync(podOptions.initScript).toString() : "#/bin/bash\n# No script specified in this deploy configuration's initScript\n")}" | base64 -d > before-init.sh
+echo "${stringToBase64(
+            podOptions.initScript
+              ? readFileSync(podOptions.initScript).toString()
+              : "#/bin/bash\n# No script specified in this deploy configuration's initScript\n"
+          )}" | base64 -d > before-init.sh
 chmod +x before-init.sh
 echo "Starting before-init script $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
 ./before-init.sh
 echo "Finished before-init script $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
 
-echo "${stringToBase64(generateDeployScript(options.project, options.shortName, options.podOptions, releaseId, composeContents, options.secretMappings))}" | base64 -d > init.sh
+echo "${stringToBase64(
+            generateDeployScript(
+              options.project,
+              options.shortName,
+              options.podOptions,
+              releaseId,
+              composeContents,
+              options.secretMappings
+            )
+          )}" | base64 -d > init.sh
 chmod +x init.sh
 echo "Starting init script $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
 su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
 echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
-`,
-      )),
+`
+        )
+      ),
 
       lifecycle: {
         // Ignore further changes since the launch template only matters on initial creation
@@ -429,7 +446,7 @@ echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds afte
           {
             networkInterfaceId: podOptions.singleton.networkInterfaceId,
             securityGroupId: podSg.securityGroupId,
-          },
+          }
         );
       } else {
         instance.securityGroups = [podSg.securityGroupId];

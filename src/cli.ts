@@ -7,37 +7,50 @@ console.log(process.argv0, process.argv);
 
 function generateReleaseId() {
   if (process.env.RELEASE !== undefined) return process.env.RELEASE;
-  return `${new Date().toISOString().replace(/\:/g, "-").replace(/\./g, "-").replace("Z", "z")}`;
+  return `${new Date()
+    .toISOString()
+    .replace(/\:/g, "-")
+    .replace(/\./g, "-")
+    .replace("Z", "z")}`;
 }
 
 const program = new Command();
 
 program.option("-d, --debug", "Display debug logs");
 program.option("-y, --yes", "Accept all prompts (POTENTIALLY DANGEROUS!)");
-program.option("-w, --workdir <path>", "Working directory to use", (workdir) => {
-  console.log(process.cwd());
-  console.log('huh', workdir);
-  if (workdir) {
-    process.chdir(workdir);
-    console.log('Current working directory is', workdir);
+program.option(
+  "-w, --workdir <path>",
+  "Working directory to use",
+  (workdir) => {
+    console.log(process.cwd());
+    console.log("huh", workdir);
+    if (workdir) {
+      process.chdir(workdir);
+      console.log("Current working directory is", workdir);
+    }
+    console.log(process.cwd());
   }
-  console.log(process.cwd());
-});
+);
 program.option(
   "-c, --config <path>",
   "Path to the configuration file",
-  "deploy.yml",
+  "deploy.yml"
 );
 
 program
   .command("synth")
   .description("Synthesize Terraform configuration for the specified stacks(s)")
-  .argument("[stacks...]", "Stack(s) to synthesize. If unspecified, all stacks are synthesized.", ['*'])
+  .argument(
+    "[stacks...]",
+    "Stack(s) to synthesize. If unspecified, all stacks are synthesized.",
+    ["*"]
+  )
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    generateReleaseId(),
-  ).action(async (stacks, options) => {
+    generateReleaseId()
+  )
+  .action(async (stacks, options) => {
     const app = new App(CLI_PATH, program.opts());
     await app.synth(stacks);
   });
@@ -48,8 +61,9 @@ program
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    generateReleaseId(),
-  ).action(async (options) => {
+    generateReleaseId()
+  )
+  .action(async (options) => {
     const app = new App(CLI_PATH, program.opts());
     await app._synth({ ...options });
   });
@@ -57,11 +71,15 @@ program
 program
   .command("deploy")
   .description("Deploy this stack")
-  .argument("[pods...]", "Pod(s) to deploy. If unspecified, all pods are deployed.", [])
+  .argument(
+    "[pods...]",
+    "Pod(s) to deploy. If unspecified, all pods are deployed.",
+    []
+  )
   .option(
     "--skip-apply",
     "Skip the apply step (faster for container swap deploys)",
-    false,
+    false
   )
   .option("--apply-only", "Skip the deploy step after the apply", false)
   .action(async (pods, options) => {
@@ -72,7 +90,11 @@ program
 program
   .command("plan")
   .description("Generate a deployment plan the specified stacks")
-  .argument("[stacks...]", "Stack to plan. If unspecified, all stacks are planned.", [])
+  .argument(
+    "[stacks...]",
+    "Stack to plan. If unspecified, all stacks are planned.",
+    []
+  )
   .action(async (stacks) => {
     const app = new App(CLI_PATH, program.opts());
     await app.plan(stacks);
@@ -81,7 +103,11 @@ program
 program
   .command("destroy")
   .description("Destroy all resources for the specified stacks")
-  .argument("[stacks...]", "Stack to plan. If unspecified, all stacks are planned.", [])
+  .argument(
+    "[stacks...]",
+    "Stack to plan. If unspecified, all stacks are planned.",
+    []
+  )
   .action(async (stacks) => {
     const app = new App(CLI_PATH, program.opts());
     await app.destroy(stacks);

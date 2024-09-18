@@ -16,7 +16,7 @@ export const DeployConfigSchema = Type.Object({
       Type.Object({
         public: Type.Array(Type.String({ pattern: "^subnet-[a-f0-9]+$" })),
         private: Type.Array(Type.String({ pattern: "^subnet-[a-f0-9]+$" })),
-      }),
+      })
     ),
   }),
 
@@ -28,8 +28,8 @@ export const DeployConfigSchema = Type.Object({
           Type.Array(Type.String(), { uniqueItems: true }),
           Type.Record(Type.String(), Type.String()),
         ]),
-      }),
-    ),
+      })
+    )
   ),
 
   loadBalancers: Type.Optional(
@@ -43,8 +43,8 @@ export const DeployConfigSchema = Type.Object({
         public: Type.Optional(Type.Boolean({ default: false })),
         idleTimeout: Type.Optional(Type.Integer({ minimum: 1, default: 60 })),
       }),
-      { additionalProperties: false, default: {} },
-    ),
+      { additionalProperties: false, default: {} }
+    )
   ),
 
   pods: Type.Record(
@@ -54,12 +54,12 @@ export const DeployConfigSchema = Type.Object({
         Type.Union([
           Type.Record(
             Type.String(),
-            Type.Union([Type.String(), Type.Undefined(), Type.Null()]),
+            Type.Union([Type.String(), Type.Undefined(), Type.Null()])
           ),
           Type.Array(Type.String({ pattern: "^[A-Z0-9_]+$" }), {
             uniqueItems: true,
           }),
-        ]),
+        ])
       ),
 
       image: Type.String({ pattern: "^ami-[a-f0-9]+$" }),
@@ -75,9 +75,9 @@ export const DeployConfigSchema = Type.Object({
         Type.Object({
           subnet: Type.Optional(Type.String({ pattern: "^subnet-[a-f0-9]+$" })),
           networkInterfaceId: Type.Optional(
-            Type.TemplateLiteral("eni-${string}"),
+            Type.TemplateLiteral("eni-${string}")
           ),
-        }),
+        })
       ),
 
       autoscaling: Type.Optional(
@@ -92,7 +92,7 @@ export const DeployConfigSchema = Type.Object({
             minimum: 0,
             maximum: 100,
           }),
-        }),
+        })
       ),
 
       deploy: Type.Object({
@@ -101,7 +101,7 @@ export const DeployConfigSchema = Type.Object({
           Type.Literal("new-containers"),
         ]),
         detachBeforeContainerSwap: Type.Optional(
-          Type.Boolean({ default: true }),
+          Type.Boolean({ default: true })
         ),
         shutdownTimeout: Type.Integer({ minimum: 0 }),
       }),
@@ -123,7 +123,7 @@ export const DeployConfigSchema = Type.Object({
                 ]),
                 port: Type.Integer({ minimum: 1, maximum: 65535 }),
                 cert: Type.String(),
-              }),
+              })
             ),
             public: Type.Optional(Type.Boolean({ default: false })),
             target: Type.Object({
@@ -145,10 +145,10 @@ export const DeployConfigSchema = Type.Object({
                         Type.Literal("do-nothing"),
                         Type.Literal("force-terminate-connection"),
                       ],
-                      { default: "do-nothing" },
-                    ),
+                      { default: "do-nothing" }
+                    )
                   ),
-                }),
+                })
               ),
               healthCheck: Type.Optional(
                 Type.Object({
@@ -157,19 +157,19 @@ export const DeployConfigSchema = Type.Object({
                     Type.Union([
                       Type.Integer({ minimum: 200, maximum: 599 }),
                       Type.String(),
-                    ]),
+                    ])
                   ),
                   healthyThreshold: Type.Integer({ minimum: 1 }),
                   unhealthyThreshold: Type.Integer({ minimum: 1 }),
                   timeout: Type.Integer({ minimum: 1 }),
                   interval: Type.Integer({ minimum: 5 }),
-                }),
+                })
               ),
             }),
-          }),
-        ),
+          })
+        )
       ),
-    }),
+    })
   ),
 });
 
@@ -185,7 +185,7 @@ function extractErrors(iterator) {
 export function parseConfig(configPath: string) {
   let config: DeployConfig = parseDocument(
     readFileSync(configPath).toString(),
-    { merge: true },
+    { merge: true }
   ).toJSON();
   const configErrors = extractErrors(DEPLOY_CONFIG_COMPILER.Errors(config));
   if (configErrors?.length) {
@@ -199,13 +199,13 @@ export function parseConfig(configPath: string) {
   config = Value.Default(DeployConfigSchema, config) as DeployConfig;
 
   for (const [secretName, secretConfig] of Object.entries(
-    config.secrets || {},
+    config.secrets || {}
   )) {
     if (Array.isArray(secretConfig.podsIncluded)) {
       for (const podName of secretConfig.podsIncluded) {
         if (!config.pods[podName]) {
           throw new Error(
-            `Secret ${secretName} exposed to pod ${podName}, which does not exist`,
+            `Secret ${secretName} exposed to pod ${podName}, which does not exist`
           );
         }
       }
@@ -214,7 +214,7 @@ export function parseConfig(configPath: string) {
       for (const podName of Object.keys(secretConfig.podsIncluded)) {
         if (!config.pods[podName]) {
           throw new Error(
-            `Secret ${secretName} exposed to pod ${podName}, which does not exist`,
+            `Secret ${secretName} exposed to pod ${podName}, which does not exist`
           );
         }
       }
@@ -227,12 +227,12 @@ export function parseConfig(configPath: string) {
     if (podConfig.singleton) {
       if (podConfig.autoscaling) {
         throw new Error(
-          `Pod ${podName} cannot specify both singleton and autoscaling options -- they are mutually exclusive`,
+          `Pod ${podName} cannot specify both singleton and autoscaling options -- they are mutually exclusive`
         );
       }
     } else if (!podConfig.autoscaling) {
       throw new Error(
-        `Pod ${podName} must specify autoscaling options -- specify singleton if you want a single instance`,
+        `Pod ${podName} must specify autoscaling options -- specify singleton if you want a single instance`
       );
     }
 
@@ -245,7 +245,9 @@ export function parseConfig(configPath: string) {
     ]);
     if (!result.success) {
       throw new Error(
-        `Invalid compose file ${podConfig.compose} for pod ${podName}\n${result.stdout.toString()}\n${result.stderr.toString()}`,
+        `Invalid compose file ${
+          podConfig.compose
+        } for pod ${podName}\n${result.stdout.toString()}\n${result.stderr.toString()}`
       );
     }
   }

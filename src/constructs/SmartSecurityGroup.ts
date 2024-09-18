@@ -16,7 +16,7 @@ export class SmartSecurityGroup extends Construct {
   constructor(
     scope: Construct,
     id: string,
-    options: SmartSecurityGroupOptions,
+    options: SmartSecurityGroupOptions
   ) {
     super(scope, id);
 

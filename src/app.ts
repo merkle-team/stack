@@ -20,69 +20,97 @@ const TF_ENVARS = { TF_IN_AUTOMATION: "1" };
 export class App {
   private config: DeployConfig;
 
-  constructor(private readonly cliPath: string, private readonly options: Record<string, string | boolean>) {
+  constructor(
+    private readonly cliPath: string,
+    private readonly options: Record<string, string | boolean>
+  ) {
     this.options = JSON.parse(JSON.stringify(options));
     this.config = parseConfig(this.options.config as string);
     this.createCdktfJson();
   }
 
   private createCdktfJson() {
-    writeFileSync('./cdktf.json', JSON.stringify({
-      app: `bun ${this.cliPath} _cdktf-synth`,
-      language: "typescript",
-    }));
+    writeFileSync(
+      "./cdktf.json",
+      JSON.stringify({
+        app: `bun ${this.cliPath} _cdktf-synth`,
+        language: "typescript",
+      })
+    );
   }
 
   private generateReleaseId() {
     if (process.env.RELEASE !== undefined) return process.env.RELEASE;
-    return `${new Date().toISOString().replace(/\:/g, "-").replace(/\./g, "-").replace("Z", "z")}`;
+    return `${new Date()
+      .toISOString()
+      .replace(/\:/g, "-")
+      .replace(/\./g, "-")
+      .replace("Z", "z")}`;
   }
 
   private getAllStackIds() {
     const stackIds = Object.keys(this.config.loadBalancers || {})
-      .map((lbName) => `${this.config.project}-lb-${lbName}`).concat(
-      Object.keys(this.config.pods || {}).map((podName) => `${this.config.project}-pod-${podName}`));
+      .map((lbName) => `${this.config.project}-lb-${lbName}`)
+      .concat(
+        Object.keys(this.config.pods || {}).map(
+          (podName) => `${this.config.project}-pod-${podName}`
+        )
+      );
     return stackIds;
   }
 
   private normalizeStackIds(stacks: string[]) {
     return stacks.map((stackId) => {
       if (stackId.startsWith(`${this.config.project}-`)) {
-        return stackId.replace(':', '-');
+        return stackId.replace(":", "-");
       }
-      return `${this.config.project}-${stackId.replace(':', '-')}`;
+      return `${this.config.project}-${stackId.replace(":", "-")}`;
     });
   }
 
   public async synth(stacks: string[] = this.getAllStackIds()) {
     const child = await this.runCommand(
       ["bunx", "cdktf", "synth", ...this.normalizeStackIds(stacks)],
-      { env: { ...process.env, ...TF_ENVARS } },
+      { env: { ...process.env, ...TF_ENVARS } }
     );
   }
 
   public async plan(stacks: string[]) {
-    const stackIds = stacks.length ? this.normalizeStackIds(stacks) : this.getAllStackIds();
-    console.info('Planning stacks:', stackIds);
+    const stackIds = stacks.length
+      ? this.normalizeStackIds(stacks)
+      : this.getAllStackIds();
+    console.info("Planning stacks:", stackIds);
 
     await this._synth();
 
     const failed: unknown[] = [];
-    const results = await Promise.allSettled(stackIds.map((stackId) => execa({ env: { CI: 'true' }, all: true })`bunx cdktf plan --skip-synth ${stackId}`));
+    const results = await Promise.allSettled(
+      stackIds.map(
+        (stackId) =>
+          execa({
+            env: { CI: "true" },
+            all: true,
+          })`bunx cdktf plan --skip-synth ${stackId}`
+      )
+    );
     for (let i = 0; i < stackIds.length; i++) {
       const result = results[i];
       if (result.status === "rejected") {
         failed.push(result.reason);
       } else {
-        console.info("==========================================================================================");
+        console.info(
+          "=========================================================================================="
+        );
         console.info(`${stackIds[i]} plan output`);
-        console.info("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓");
+        console.info(
+          "↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓"
+        );
         console.log(result.value.all);
       }
     }
 
     if (failed.length) {
-      console.log('Failures', failed);
+      console.log("Failures", failed);
       process.exit(1);
     }
   }
@@ -90,7 +118,7 @@ export class App {
   public async deploy(podsToDeploy: string[]) {
     if (this.options.applyOnly && this.options.skipApply) {
       throw new Error(
-        "Cannot specify --apply-only and --skip-apply as they are mutually exclusive",
+        "Cannot specify --apply-only and --skip-apply as they are mutually exclusive"
       );
     }
 
@@ -103,25 +131,25 @@ export class App {
         for (const envName of podConfig.environment) {
           if (process.env[envName] === undefined) {
             throw new Error(
-              `Environment variable ${envName} is required by pod ${podName}, but was not provided in the environment`,
+              `Environment variable ${envName} is required by pod ${podName}, but was not provided in the environment`
             );
           }
           if (envName.includes("=")) {
             throw new Error(
-              `Environment variable ${envName} contains an equals sign, which is not allowed. Use a map if you want to provide explicit values`,
+              `Environment variable ${envName} contains an equals sign, which is not allowed. Use a map if you want to provide explicit values`
             );
           }
         }
       } else if (typeof podConfig.environment === "object") {
         for (const [envName, envValue] of Object.entries(
-          podConfig.environment,
+          podConfig.environment
         )) {
           if (
             (envValue === null || envValue === undefined) &&
             (envValue === process.env[envName]) === undefined
           ) {
             throw new Error(
-              `Environment variable ${envName} is required by pod ${podName}, but was not provided in the environment`,
+              `Environment variable ${envName} is required by pod ${podName}, but was not provided in the environment`
             );
           }
         }
@@ -134,8 +162,6 @@ export class App {
       : await this.alreadyRunningInstances();
 
     if (!this.options.skipApply) {
-
-
       const cwd = `${CDK_OUT_DIR}/stacks/${this.config.project}`;
       const planCmd = await this.runCommand(
         [
@@ -145,24 +171,27 @@ export class App {
           "-input=false",
           "-out=plan.out",
         ],
-        { cwd, env: { ...process.env, ...TF_ENVARS } },
+        { cwd, env: { ...process.env, ...TF_ENVARS } }
       );
-      if (![0, 2].includes(planCmd.exitCode || -1)) process.exit(planCmd.exitCode); // 0 = no changes, 2 = changes to apply
+      if (![0, 2].includes(planCmd.exitCode || -1))
+        process.exit(planCmd.exitCode); // 0 = no changes, 2 = changes to apply
 
       if (planCmd.exitCode === 2 && !this.options.yes) {
         console.error(
-          "Changes detected in Terraform plan. Check above to make sure they are intentional.",
+          "Changes detected in Terraform plan. Check above to make sure they are intentional."
         );
         const answers = await inquirer.prompt([
           {
             name: "proceed",
-            message: `Apply infra changes${this.options.applyOnly ? "" : " and then proceed with deploy"}?`,
+            message: `Apply infra changes${
+              this.options.applyOnly ? "" : " and then proceed with deploy"
+            }?`,
           },
         ]);
 
         if (!(answers.proceed === "yes" || answers.proceed === "y")) {
           console.error(
-            `Canceling deploy due to user answering ${answers.proceed} to prompt`,
+            `Canceling deploy due to user answering ${answers.proceed} to prompt`
           );
           process.exit(1);
         }
@@ -173,7 +202,7 @@ export class App {
         {
           cwd,
           env: { ...process.env, ...TF_ENVARS },
-        },
+        }
       );
 
       if (applyCmd.exitCode !== 0) process.exit(applyCmd.exitCode);
@@ -205,7 +234,7 @@ export class App {
     });
 
     const instances = result.Reservations?.flatMap(
-      (reservation) => reservation.Instances || [],
+      (reservation) => reservation.Instances || []
     );
 
     return instances || [];
@@ -214,7 +243,7 @@ export class App {
   private async swapContainers(
     releaseId: string,
     instances: EC2Instance[],
-    podsToDeploy: string[],
+    podsToDeploy: string[]
   ) {
     const instanceIds = new Set(instances.map((i) => i.InstanceId));
     const asg = new AutoScaling({ region: this.config.region });
@@ -235,7 +264,7 @@ export class App {
             AutoScalingGroupNames: [asgName],
           });
           const group = asgResult.AutoScalingGroups?.find(
-            (asg) => asg.AutoScalingGroupName === asgName,
+            (asg) => asg.AutoScalingGroupName === asgName
           );
 
           if (group?.DesiredCapacity === 0) {
@@ -263,20 +292,20 @@ export class App {
         });
 
         const instances = describeResult.Reservations?.flatMap(
-          (reservation) => reservation.Instances || [],
+          (reservation) => reservation.Instances || []
         ).filter(
           (instance) =>
             instance.Tags?.find((tag) => tag.Key === "release")?.Value !==
-            releaseId, // Skip instances on the latest release already
+            releaseId // Skip instances on the latest release already
         );
 
         if (!instances?.length) {
           if (podOptions.singleton) {
             console.error(
-              `No existing instances found for pod ${podName}, but desired capacity is > 0. Canceling deploy.`,
+              `No existing instances found for pod ${podName}, but desired capacity is > 0. Canceling deploy.`
             );
             throw new Error(
-              `No existing instances found for pod ${podName}, but desired capacity is > 0`,
+              `No existing instances found for pod ${podName}, but desired capacity is > 0`
             );
           }
           return; // No instances to swap containers on
@@ -284,7 +313,7 @@ export class App {
 
         // Filter down to instances that were already running, since new instances were likely created brand new by ASG itself
         instancesForPod[podName] = instances.filter(({ InstanceId }) =>
-          instanceIds.has(InstanceId),
+          instanceIds.has(InstanceId)
         );
 
         const composeContents = readFileSync(podOptions.compose).toString();
@@ -294,12 +323,21 @@ export class App {
             while (Date.now() - startTime < 120_000) {
               try {
                 const connectResult =
-                  await $`ssh -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${podOptions.sshUser}@${ip} bash -s < ${new Response(`
-  ${generateDeployScript(this.config.project, podName, podOptions, releaseId, composeContents, this.allowedPodSecrets(podName))}
+                  await $`ssh -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${
+                    podOptions.sshUser
+                  }@${ip} bash -s < ${new Response(`
+  ${generateDeployScript(
+    this.config.project,
+    podName,
+    podOptions,
+    releaseId,
+    composeContents,
+    this.allowedPodSecrets(podName)
+  )}
               `)}`;
                 if (connectResult.exitCode !== 0) {
                   throw new Error(
-                    `Error connecting to ${ip} (exit code ${connectResult.exitCode})`,
+                    `Error connecting to ${ip} (exit code ${connectResult.exitCode})`
                   );
                 }
 
@@ -307,20 +345,20 @@ export class App {
               } catch (e: unknown) {
                 if (Date.now() - startTime > 120_000) {
                   console.error(
-                    `Unable to connect to ${ip} after 2 minutes. Aborting deploy.`,
+                    `Unable to connect to ${ip} after 2 minutes. Aborting deploy.`
                   );
                   throw e;
                 }
                 console.error(
                   `Unable to connect to ${ip}. Retrying in 5 seconds...`,
-                  e,
+                  e
                 );
                 await sleep(5000);
               }
             }
-          }),
+          })
         );
-      }),
+      })
     );
 
     let updateFailed = false;
@@ -332,7 +370,7 @@ export class App {
     }
     if (updateFailed) {
       console.error(
-        "One or more pods failed to download the latest images specified in their respective Docker Compose file(s). Aborting deploy.",
+        "One or more pods failed to download the latest images specified in their respective Docker Compose file(s). Aborting deploy."
       );
       process.exit(1);
     }
@@ -349,7 +387,10 @@ export class App {
         const asgName = `${this.config.project}-${podName}`;
         const sshUser = podOptions.sshUser;
 
-        for (const { PrivateIpAddress: ip, InstanceId: instanceId } of instancesForPod[podName]) {
+        for (const {
+          PrivateIpAddress: ip,
+          InstanceId: instanceId,
+        } of instancesForPod[podName]) {
           if (
             podOptions.autoscaling &&
             podOptions.deploy.detachBeforeContainerSwap
@@ -371,18 +412,18 @@ export class App {
                 standbyInstances.AutoScalingInstances || [];
               if (
                 standbyDetails.every(
-                  (i) => i.LifecycleState === LifecycleState.STANDBY,
+                  (i) => i.LifecycleState === LifecycleState.STANDBY
                 )
               ) {
                 break;
               }
               if (Date.now() - beginTime > 60_000) {
                 throw new Error(
-                  `Instance ${instanceId} (${ip}) did not enter Standby state within 60 seconds.`,
+                  `Instance ${instanceId} (${ip}) did not enter Standby state within 60 seconds.`
                 );
               }
               console.info(
-                `Waiting for instance ${instanceId} (${ip}) to enter Standby state...`,
+                `Waiting for instance ${instanceId} (${ip}) to enter Standby state...`
               );
               await sleep(5000);
             }
@@ -427,11 +468,11 @@ export class App {
   echo "Deleting old release directories on ${instanceId} ${ip}"
   cd /home/${sshUser}
   ls -I current releases | sort | head -n -${MAX_RELEASES_TO_KEEP} | xargs --no-run-if-empty -I{} rm -rf releases/{}
-          `,
+          `
             )}`;
           if (connectResult.exitCode !== 0) {
             throw new Error(
-              `Error connecting to ${ip} (exit code ${connectResult.exitCode})`,
+              `Error connecting to ${ip} (exit code ${connectResult.exitCode})`
             );
           }
 
@@ -443,7 +484,7 @@ export class App {
             });
           }
         }
-      }),
+      })
     );
 
     let deployFailed = false;
@@ -455,19 +496,21 @@ export class App {
     }
     if (deployFailed) {
       console.error(
-        "One or more pods failed to start up the latest containers. Aborting deploy.",
+        "One or more pods failed to start up the latest containers. Aborting deploy."
       );
       process.exit(1);
     }
   }
 
   public async destroy(stacks: string[]) {
-    const stackIds = stacks.length ? this.normalizeStackIds(stacks) : this.getAllStackIds();
-    console.info('Destroying stacks:', stackIds);
+    const stackIds = stacks.length
+      ? this.normalizeStackIds(stacks)
+      : this.getAllStackIds();
+    console.info("Destroying stacks:", stackIds);
 
     const child = await this.runCommand(
       ["bunx", "cdktf", "destroy", ...stackIds],
-      { env: { ...process.env, ...TF_ENVARS } },
+      { env: { ...process.env, ...TF_ENVARS } }
     );
   }
 
@@ -506,9 +549,10 @@ export class App {
       ],
     });
 
-    const instances = result.Reservations?.flatMap(
-      (reservation) => reservation.Instances || [],
-    ) || [];
+    const instances =
+      result.Reservations?.flatMap(
+        (reservation) => reservation.Instances || []
+      ) || [];
     if (instances.length === 0) {
       if (pod) {
         console.error(`No running instances found for pod ${pod}`);
@@ -526,10 +570,10 @@ export class App {
     const candidates: string[] = [];
     for (const instance of instances) {
       const instancePod = instance.Tags?.findLast(
-        (tag) => tag.Key === "pod",
+        (tag) => tag.Key === "pod"
       )?.Value;
       const release = instance.Tags?.findLast(
-        (tag) => tag.Key === "release",
+        (tag) => tag.Key === "release"
       )?.Value;
       if (!instancePod || !release) continue;
       candidates.push(
@@ -538,7 +582,7 @@ export class App {
           instance.PrivateIpAddress?.padEnd(16, " "),
           release.padEnd(25, " "),
           instancePod.padEnd(25, " ").slice(0, 25),
-        ].join(" "),
+        ].join(" ")
       );
     }
 
@@ -559,7 +603,7 @@ export class App {
       if (code === 0) {
         const [instanceId, privateIp, , pod] = choice.split(/\s+/);
         console.info(
-          `Connecting to pod ${pod} (${instanceId}) at ${privateIp}...`,
+          `Connecting to pod ${pod} (${instanceId}) at ${privateIp}...`
         );
         this.sshInto(sshUser, privateIp);
       } else {
@@ -585,7 +629,7 @@ export class App {
       ],
       {
         stdio: ["inherit", "inherit", "inherit"],
-      },
+      }
     );
     process.exit(sshResult.exitCode);
   }
@@ -599,7 +643,7 @@ export class App {
     // Create separate state file for each load balancer defined
     const lbs: Record<string, lb.Lb> = {};
     for (const [lbName, lbOptions] of Object.entries(
-      this.config.loadBalancers || {},
+      this.config.loadBalancers || {}
     )) {
       const lbStack = new LoadBalancerStack(
         app,
@@ -611,11 +655,12 @@ export class App {
           shortName: lbName,
           type: lbOptions.type,
           public: lbOptions.public,
-          subnets: (lbOptions.public
-            ? this.config.network?.subnets?.public
-            : this.config.network?.subnets?.private) || [],
+          subnets:
+            (lbOptions.public
+              ? this.config.network?.subnets?.public
+              : this.config.network?.subnets?.private) || [],
           idleTimeout: lbOptions.idleTimeout,
-        },
+        }
       );
 
       lbs[lbName] = lbStack.lb;
@@ -633,8 +678,11 @@ export class App {
         shortName: podName,
         region: this.config.region,
         vpcId: this.config.network.id,
-        defaultSubnetIds: podOptions.singleton ? undefined 
-          : (podOptions.publicIp ? this.config.network?.subnets?.public : this.config.network?.subnets?.private),
+        defaultSubnetIds: podOptions.singleton
+          ? undefined
+          : podOptions.publicIp
+          ? this.config.network?.subnets?.public
+          : this.config.network?.subnets?.private,
         secretMappings: this.allowedPodSecrets(podName),
         lbs,
         podOptions,
@@ -645,7 +693,7 @@ export class App {
 
   private async runCommand(
     command: string[],
-    options: Parameters<typeof Bun.spawn>[1] = {},
+    options: Parameters<typeof Bun.spawn>[1] = {}
   ) {
     const subprocess = Bun.spawn(command, {
       stdin: "inherit",
@@ -660,7 +708,7 @@ export class App {
   private allowedPodSecrets(podName: string) {
     const allowedSecrets: Record<string, string> = {};
     for (const [secretName, secretOptions] of Object.entries(
-      this.config.secrets || {},
+      this.config.secrets || {}
     )) {
       if (
         Array.isArray(secretOptions.podsIncluded) &&
