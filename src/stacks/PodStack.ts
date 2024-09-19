@@ -184,7 +184,7 @@ export class PodStack extends TerraformStack {
       ipProtocol: "tcp",
       fromPort: 22,
       toPort: 22,
-      cidrIpv4: "10.0.0.0/8",
+      cidrIpv4: "0.0.0.0/0", // TODO: Lock down further
       tags: {
         Name: `${fullPodName}-ingress-ssh`,
         pod: options.shortName,
