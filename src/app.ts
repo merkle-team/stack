@@ -7,13 +7,11 @@ import { lb } from "@cdktf/provider-aws";
 import { spawn } from "child_process";
 import { sleep } from "./util";
 import { AutoScaling, LifecycleState } from "@aws-sdk/client-auto-scaling";
-import inquirer from "inquirer";
 import { LoadBalancerStack } from "./stacks/LoadBalancerStack";
 import { PodStack } from "./stacks/PodStack";
 import { generateDeployScript } from "./util";
 import { execa } from "execa";
 
-const CDK_OUT_DIR = ".stack";
 const MAX_RELEASES_TO_KEEP = 3;
 const TF_ENVARS = { TF_IN_AUTOMATION: "1" };
 
