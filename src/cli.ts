@@ -3,8 +3,6 @@ import { App } from "./app";
 
 const CLI_PATH = import.meta.path;
 
-console.log(process.argv0, process.argv);
-
 function generateReleaseId() {
   if (process.env.RELEASE !== undefined) return process.env.RELEASE;
   return `${new Date()
@@ -22,13 +20,9 @@ program.option(
   "-w, --workdir <path>",
   "Working directory to use",
   (workdir) => {
-    console.log(process.cwd());
-    console.log("huh", workdir);
     if (workdir) {
       process.chdir(workdir);
-      console.log("Current working directory is", workdir);
     }
-    console.log(process.cwd());
   }
 );
 program.option(

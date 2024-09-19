@@ -24,6 +24,7 @@ import { NetworkInterfaceSgAttachment } from "@cdktf/provider-aws/lib/network-in
 import { Instance } from "@cdktf/provider-aws/lib/instance";
 import { stringToBase64 } from "uint8array-extras";
 import { TerraformStateBackend } from "../constructs/TerraformStateBackend";
+import * as zlib from "zlib";
 
 type PodStackOptions = {
   releaseId: string;
@@ -175,6 +176,7 @@ export class PodStack extends TerraformStack {
     const podSg = new SmartSecurityGroup(this, fullPodName, {
       project: options.project,
       shortName: options.shortName,
+      vpcId: vpc.id,
     });
 
     new VpcSecurityGroupIngressRule(this, `${fullPodName}-ingress-ssh`, {
@@ -329,6 +331,38 @@ export class PodStack extends TerraformStack {
       }
     );
 
+    // Executed by cloud-init when the instance starts up
+    // Use `sensitive` to hide massive base64 blob in diffs
+    const userData = `#!/bin/bash
+set -e -o pipefail
+
+cd /home/${podOptions.sshUser}
+echo "${zlib
+      .gzipSync(
+        podOptions.initScript
+          ? readFileSync(podOptions.initScript).toString()
+          : "#/bin/bash\n# No script specified in this deploy configuration's initScript\n"
+      )
+      .toString("base64")}" | base64 -d | gunzip > before-init.sh
+chmod +x before-init.sh
+./before-init.sh
+
+echo "${zlib
+      .gzipSync(
+        generateDeployScript(
+          options.project,
+          options.shortName,
+          options.podOptions,
+          releaseId,
+          composeContents,
+          options.secretMappings
+        )
+      )
+      .toString("base64")}" | base64 -d | gunzip > init.sh
+chmod +x init.sh
+su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
+`;
+
     const lt = new LaunchTemplate(this, `${fullPodName}-lt`, {
       name: fullPodName,
       imageId: podOptions.image,
@@ -383,41 +417,7 @@ export class PodStack extends TerraformStack {
         },
       ],
 
-      // Executed by cloud-init when the instance starts up
-      // Use `sensitive` to hide massive base64 blob in diffs
-      userData: Fn.sensitive(
-        stringToBase64(
-          `#!/bin/bash
-set -e -o pipefail
-
-cd /home/${podOptions.sshUser}
-echo "${stringToBase64(
-            podOptions.initScript
-              ? readFileSync(podOptions.initScript).toString()
-              : "#/bin/bash\n# No script specified in this deploy configuration's initScript\n"
-          )}" | base64 -d > before-init.sh
-chmod +x before-init.sh
-echo "Starting before-init script $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
-./before-init.sh
-echo "Finished before-init script $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
-
-echo "${stringToBase64(
-            generateDeployScript(
-              options.project,
-              options.shortName,
-              options.podOptions,
-              releaseId,
-              composeContents,
-              options.secretMappings
-            )
-          )}" | base64 -d > init.sh
-chmod +x init.sh
-echo "Starting init script $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
-su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
-echo "Finished init script $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
-`
-        )
-      ),
+      userData: Fn.sensitive(stringToBase64(userData)), // Hide in diffs since it's a large blob
 
       lifecycle: {
         // Ignore further changes since the launch template only matters on initial creation

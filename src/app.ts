@@ -115,7 +115,7 @@ export class App {
     }
   }
 
-  public async deploy(podsToDeploy: string[]) {
+  public async deploy(stacks: string[]) {
     if (this.options.applyOnly && this.options.skipApply) {
       throw new Error(
         "Cannot specify --apply-only and --skip-apply as they are mutually exclusive"
@@ -125,7 +125,7 @@ export class App {
     const release = this.generateReleaseId();
 
     for (const [podName, podConfig] of Object.entries(this.config.pods)) {
-      if (podsToDeploy.length > 0 && !podsToDeploy.includes(podName)) continue;
+      if (stacks.length > 0 && !stacks.includes(podName)) continue;
 
       if (Array.isArray(podConfig.environment)) {
         for (const envName of podConfig.environment) {
@@ -159,58 +159,20 @@ export class App {
     // Get current instances before making any changes
     const alreadyRunningInstances = this.options.applyOnly
       ? []
-      : await this.alreadyRunningInstances();
+      : await this.alreadyRunningInstances(stacks);
 
     if (!this.options.skipApply) {
-      const cwd = `${CDK_OUT_DIR}/stacks/${this.config.project}`;
-      const planCmd = await this.runCommand(
-        [
-          "terraform",
-          "plan",
-          "-detailed-exitcode",
-          "-input=false",
-          "-out=plan.out",
-        ],
-        { cwd, env: { ...process.env, ...TF_ENVARS } }
-      );
-      if (![0, 2].includes(planCmd.exitCode || -1))
-        process.exit(planCmd.exitCode); // 0 = no changes, 2 = changes to apply
-
-      if (planCmd.exitCode === 2 && !this.options.yes) {
-        console.error(
-          "Changes detected in Terraform plan. Check above to make sure they are intentional."
-        );
-        const answers = await inquirer.prompt([
-          {
-            name: "proceed",
-            message: `Apply infra changes${
-              this.options.applyOnly ? "" : " and then proceed with deploy"
-            }?`,
-          },
-        ]);
-
-        if (!(answers.proceed === "yes" || answers.proceed === "y")) {
-          console.error(
-            `Canceling deploy due to user answering ${answers.proceed} to prompt`
-          );
-          process.exit(1);
-        }
-      }
-
-      const applyCmd = await this.runCommand(
-        ["terraform", "apply", "-input=false", "plan.out"],
-        {
-          cwd,
-          env: { ...process.env, ...TF_ENVARS },
-        }
+      const child = await this.runCommand(
+        ["bunx", "cdktf", "apply", ...this.normalizeStackIds(stacks)],
+        { env: { ...process.env, ...TF_ENVARS } }
       );
 
-      if (applyCmd.exitCode !== 0) process.exit(applyCmd.exitCode);
+      if (child.exitCode !== 0) process.exit(child.exitCode);
     }
 
     // Only perform a swap if there are already running instances.
     if (!this.options.applyOnly && alreadyRunningInstances.length) {
-      await this.swapContainers(release, alreadyRunningInstances, podsToDeploy);
+      await this.swapContainers(release, alreadyRunningInstances, stacks);
     }
 
     // TODO: Wait until all ASGs are healthy and at desired count
@@ -218,8 +180,8 @@ export class App {
     process.exit(0);
   }
 
-  private async alreadyRunningInstances() {
-    const ec2 = new EC2({ region: "us-east-1" });
+  private async alreadyRunningInstances(pods: string[]) {
+    const ec2 = new EC2({ region: this.config.region });
     const result = await ec2.describeInstances({
       Filters: [
         {

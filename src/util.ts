@@ -1,5 +1,6 @@
 import { stringToBase64 } from "uint8array-extras";
 import { DeployConfig } from "./config";
+import { gzipSync } from "zlib";
 
 export function sleep(millis: number) {
   return new Promise((resolve) => setTimeout(resolve, millis));
@@ -82,16 +83,13 @@ if [ ! -d /home/${sshUser}/releases/${releaseId} ]; then
   echo "${stringToBase64(composeContents)}" | base64 -d > docker-compose.yml
 
   if [ -f /home/${sshUser}/releases/current ]; then
-    # Instance was already deployed to
     echo "Downloading and preparing Docker images on \$INSTANCE_ID \$private_ipv4 before swapping containers"
     docker compose build --pull
   else 
     # Avoid weird errors on first boot; see https://github.com/moby/moby/issues/22074#issuecomment-856551466
     sudo systemctl restart docker
 
-    echo "Starting Docker containers $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
     docker compose up --detach
-
     echo "Finished starting Docker containers $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
     echo "$new_release_dir" > /home/${sshUser}/releases/current
   fi

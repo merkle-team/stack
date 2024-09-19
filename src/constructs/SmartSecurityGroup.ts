@@ -8,6 +8,7 @@ type OriginalSecurityGroupOptions = ConstructorParameters<
 type SmartSecurityGroupOptions = {
   project: string;
   shortName: string;
+  vpcId: string;
 } & OriginalSecurityGroupOptions;
 
 export class SmartSecurityGroup extends Construct {

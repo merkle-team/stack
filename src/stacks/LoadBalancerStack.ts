@@ -55,6 +55,7 @@ export class LoadBalancerStack extends TerraformStack {
     const lbSg = new SmartSecurityGroup(this, `lb-ssg-${uniqueLbName}`, {
       project: options.project,
       shortName: options.shortName,
+      vpcId: vpc.id,
     });
 
     // Allow ingress from anywhere
