@@ -211,6 +211,7 @@ export class App {
     instances: EC2Instance[],
     podsToDeploy: string[]
   ) {
+    console.log("Swapping containers");
     const instanceIds = new Set(instances.map((i) => i.InstanceId));
     const asg = new AutoScaling({ region: this.config.region });
     const instancesForPod: Record<string, EC2Instance[]> = {};
@@ -218,10 +219,13 @@ export class App {
     const updateResults = await Promise.allSettled(
       Object.entries(this.config.pods).map(async ([podName, podOptions]) => {
         if (podsToDeploy.length > 0 && !podsToDeploy.includes(podName)) return; // Skip pod
+        console.log("Swapping pod", podName);
 
         if (podOptions.deploy.replaceWith !== "new-containers") {
           return; // Nothing to do
         }
+
+        console.log("Actually swapping pod", podName);
 
         // If pod is part of ASG, check desired capacity before proceeding
         if (podOptions.autoscaling) {
@@ -265,6 +269,8 @@ export class App {
             releaseId // Skip instances on the latest release already
         );
 
+        console.log("Instances", instances?.length);
+
         if (!instances?.length) {
           if (podOptions.singleton) {
             console.error(
@@ -288,10 +294,11 @@ export class App {
             const startTime = Date.now();
             while (Date.now() - startTime < 120_000) {
               try {
-                const connectResult =
-                  await $`ssh -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${
-                    podOptions.sshUser
-                  }@${ip} bash -s < ${new Response(`
+                const connectResult = await $`ssh${
+                  this.options.yes ? " -o BatchMode=yes" : ""
+                } -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${
+                  podOptions.sshUser
+                }@${ip} bash -s < ${new Response(`
   ${generateDeployScript(
     this.config.project,
     podName,
