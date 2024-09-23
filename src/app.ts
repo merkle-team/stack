@@ -300,11 +300,10 @@ export class App {
                 /\n/g,
                 " "
               );
-              console.log('Flags', JSON.stringify(flags));
               try {
-                const connectResult = await $`ssh ${flags} ${
-                  podOptions.sshUser
-                }@${ip} bash -s < ${new Response(`
+                const sshPrefix = `ssh ${flags} ${podOptions.sshUser}@${ip}`;
+                const connectResult =
+                  await $`${sshPrefix} bash -s < ${new Response(`
   ${generateDeployScript(
     this.config.project,
     podName,
