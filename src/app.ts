@@ -161,7 +161,13 @@ export class App {
 
     if (!this.options.skipApply) {
       const child = await this.runCommand(
-        ["bunx", "cdktf", "apply", ...this.normalizeStackIds(stacks)],
+        [
+          "bunx",
+          "cdktf",
+          "apply",
+          ...(this.options.yes ? ["--auto-approve"] : []),
+          ...this.normalizeStackIds(stacks),
+        ],
         { env: { ...process.env, ...TF_ENVARS } }
       );
 
@@ -469,7 +475,13 @@ export class App {
     console.info("Destroying stacks:", stackIds);
 
     const child = await this.runCommand(
-      ["bunx", "cdktf", "destroy", ...stackIds],
+      [
+        "bunx",
+        "cdktf",
+        "destroy",
+        ...(this.options.yes ? ["--auto-approve"] : []),
+        ...stackIds,
+      ],
       { env: { ...process.env, ...TF_ENVARS } }
     );
   }
@@ -577,6 +589,7 @@ export class App {
     const sshResult = Bun.spawnSync(
       [
         "ssh",
+        ...(this.options.yes ? ["-o", "BatchMode=yes"] : []),
         "-o",
         "LogLevel=ERROR",
         // Gets really annoying to have to clear your known hosts file
