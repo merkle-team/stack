@@ -300,6 +300,7 @@ export class App {
                 /\n/g,
                 " "
               );
+              console.log('Flags', JSON.stringify(flags));
               try {
                 const connectResult = await $`ssh ${flags} ${
                   podOptions.sshUser
