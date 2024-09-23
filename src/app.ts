@@ -294,10 +294,11 @@ export class App {
           instances.map(async ({ PrivateIpAddress: ip }) => {
             const startTime = Date.now();
             while (Date.now() - startTime < 120_000) {
+              const flags = `${
+                this.options.yes ? "-o BatchMode=yes " : ""
+              }-o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a`;
               try {
-                const connectResult = await $`ssh${
-                  this.options.yes ? " -o BatchMode=yes" : ""
-                } -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${
+                const connectResult = await $`ssh ${flags} ${
                   podOptions.sshUser
                 }@${ip} bash -s < ${new Response(`
   ${generateDeployScript(
