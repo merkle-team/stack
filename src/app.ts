@@ -296,7 +296,10 @@ export class App {
             while (Date.now() - startTime < 120_000) {
               const flags = `${
                 this.options.yes ? "-o BatchMode=yes " : ""
-              }-o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a`;
+              }-o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a`.replace(
+                /\n/g,
+                " "
+              );
               try {
                 const connectResult = await $`ssh ${flags} ${
                   podOptions.sshUser
