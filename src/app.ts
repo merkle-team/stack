@@ -270,8 +270,6 @@ export class App {
             releaseId // Skip instances on the latest release already
         );
 
-        console.log("Instances", instances?.length);
-
         if (!instances?.length) {
           if (podOptions.singleton) {
             console.error(
@@ -296,7 +294,7 @@ export class App {
             while (Date.now() - startTime < 120_000) {
               try {
                 const connectResult =
-                  await $`ssh -o BatchMode=yes -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${
+                  await $`ssh -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${
                     podOptions.sshUser
                   }@${ip} bash -s < ${new Response(`
   ${generateDeployScript(
