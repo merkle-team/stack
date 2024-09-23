@@ -218,7 +218,8 @@ export class App {
 
     const updateResults = await Promise.allSettled(
       Object.entries(this.config.pods).map(async ([podName, podOptions]) => {
-        if (podsToDeploy.length > 0 && !podsToDeploy.includes(podName)) return; // Skip pod
+        if (podsToDeploy.length > 0 && !podsToDeploy.includes(`pod:${podName}`))
+          return; // Skip pod
         console.log("Swapping pod", podName);
 
         if (podOptions.deploy.replaceWith !== "new-containers") {
