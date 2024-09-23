@@ -211,7 +211,7 @@ export class App {
     instances: EC2Instance[],
     podsToDeploy: string[]
   ) {
-    console.log("Swapping containers");
+    console.log("Swapping containers", instances.length, podsToDeploy);
     const instanceIds = new Set(instances.map((i) => i.InstanceId));
     const asg = new AutoScaling({ region: this.config.region });
     const instancesForPod: Record<string, EC2Instance[]> = {};
