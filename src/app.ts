@@ -365,7 +365,8 @@ export class App {
     // Swap all instances to start using the new containers
     const swapResults = await Promise.allSettled(
       Object.entries(this.config.pods).map(async ([podName, podOptions]) => {
-        if (podsToDeploy.length > 0 && !podsToDeploy.includes(podName)) return; // Skip pod
+        if (podsToDeploy.length > 0 && !podsToDeploy.includes(`pod:${podName}`))
+          return; // Skip pod
 
         if (podOptions.deploy.replaceWith !== "new-containers") {
           return; // Nothing to do
