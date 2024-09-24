@@ -431,8 +431,8 @@ export class App {
     cd "$(cat /home/${sshUser}/releases/current)"
   fi
   # Stop all pod containers if any are running
-  docker ps --quiet --all | xargs docker stop --time ${podOptions.deploy.shutdownTimeout}
-  docker ps --quiet --all | xargs docker rm --force --volumes
+  docker ps --quiet --all | xargs --no-run-if-empty docker stop --time ${podOptions.deploy.shutdownTimeout}
+  docker ps --quiet --all | xargs --no-run-if-empty docker rm --force --volumes
   if [ -f docker-compose.yml ]; then
     # Also remove any networks
     docker compose down --volumes --timeout ${podOptions.deploy.shutdownTimeout} # Blocks until finished or timed out
