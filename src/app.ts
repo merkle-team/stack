@@ -407,6 +407,8 @@ export class App {
             }
           }
 
+          console.log(`About to swap containers on ${sshUser}@${ip}`);
+
           // Swap the containers
           const connectResult =
             await $`ssh -T -F /dev/null -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${new Response(
@@ -448,6 +450,7 @@ export class App {
   ls -I current releases | sort | head -n -${MAX_RELEASES_TO_KEEP} | xargs --no-run-if-empty -I{} rm -rf releases/{}
           `
             )}`;
+          console.log('RESULT', connectResult.text(), connectResult.stderr.toString());
           if (connectResult.exitCode !== 0) {
             throw new Error(
               `Error connecting to ${ip} (exit code ${connectResult.exitCode})`
