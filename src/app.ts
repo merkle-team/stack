@@ -296,7 +296,7 @@ export class App {
                 const { sshUser, bastionUser, bastionHost } = podOptions;
 
                 const connectResult =
-                  await $`ssh -vvv -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o PasswordAuthentication=no -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${sshUser}@${ip} bash -s < ${new Response(`
+                  await $`ssh -vvv -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o PasswordAuthentication=no -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${sshUser}@${ip} bash -s < ${new Response(`
   ${generateDeployScript(
     this.config.project,
     podName,
