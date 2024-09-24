@@ -215,6 +215,10 @@ export class App {
     const asg = new AutoScaling({ region: this.config.region });
     const instancesForPod: Record<string, EC2Instance[]> = {};
 
+    // HACK: Clear known hosts file to avoid issues with SSH client
+    // when connecting via jump host
+    await $`rm -f ~/.ssh/known_hosts`;
+
     const updateResults = await Promise.allSettled(
       Object.entries(this.config.pods).map(async ([podName, podOptions]) => {
         if (
@@ -295,8 +299,7 @@ export class App {
               try {
                 const { sshUser, bastionUser, bastionHost } = podOptions;
 
-                // Ensure we record the current host key
-                await $`rm -f ~/.ssh/known_hosts`;
+                // Record the current host key (workaround for SSH client jump host bug)
                 await $`ssh -T -F /dev/null -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${bastionUser}@${bastionHost}`;
 
                 const connectResult =
