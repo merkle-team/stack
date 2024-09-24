@@ -293,8 +293,10 @@ export class App {
             const startTime = Date.now();
             while (Date.now() - startTime < 120_000) {
               try {
+                const { sshUser, bastionUser, bastionHost } = podOptions;
+
                 const connectResult =
-                  await $`ssh -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${
+                  await $`ssh -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${
                     podOptions.sshUser
                   }@${ip} bash -s < ${new Response(`
   ${generateDeployScript(
@@ -502,8 +504,6 @@ export class App {
       process.exit(1);
     }
 
-    const sshUser = this.config.pods[pod].sshUser as string;
-
     const ec2 = new EC2({ region: this.config.region });
     const result = await ec2.describeInstances({
       Filters: [
@@ -539,6 +539,7 @@ export class App {
       process.exit(1);
     }
 
+    const sshUser = this.config.pods[pod].sshUser as string;
     if (instances.length === 1) {
       // Only one to chose from, so select automatically
       this.sshInto(sshUser, instances[0].PrivateIpAddress as string);
