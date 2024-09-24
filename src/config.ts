@@ -64,6 +64,8 @@ export const DeployConfigSchema = Type.Object({
 
       image: Type.String({ pattern: "^ami-[a-f0-9]+$" }),
       sshUser: Type.String({ default: "ec2-user" }),
+      bastionUser: Type.String({ default: "ec2-user" }),
+      bastionHost: Type.String(),
       instanceType: Type.String(),
       publicIp: Type.Optional(Type.Boolean()),
 
