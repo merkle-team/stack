@@ -295,11 +295,12 @@ export class App {
               try {
                 const { sshUser, bastionUser, bastionHost } = podOptions;
 
-                const sshVersion = (await $`ssh -V`).stderr.toString();
-                console.log("SSH VERSION", JSON.stringify(sshVersion));
+                // Ensure we record the current host key
+                await $`rm -f ~/.ssh/known_hosts`;
+                await $`ssh -T -F /dev/null -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${bastionUser}@${bastionHost}`;
 
                 const connectResult =
-                  await $`ssh -T -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o PasswordAuthentication=no -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${sshUser}@${ip} bash -s < ${new Response(`
+                  await $`ssh -T -F /dev/null -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${new Response(`
   ${generateDeployScript(
     this.config.project,
     podName,
