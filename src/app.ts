@@ -295,7 +295,7 @@ export class App {
               try {
                 const { sshUser, bastionUser, bastionHost } = podOptions;
 
-                const sshVersion = await $`ssh -V`.text();
+                const sshVersion = (await $`ssh -V`).stderr.toString();
                 console.log("SSH VERSION", JSON.stringify(sshVersion));
 
                 const connectResult =
