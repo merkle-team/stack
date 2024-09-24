@@ -405,7 +405,7 @@ export class App {
 
           // Swap the containers
           const connectResult =
-            await $`ssh -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${sshUser}@${ip} bash -s < ${new Response(
+            await $`ssh -F /dev/null -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${sshUser}@${ip} bash -s < ${new Response(
               `# Execute these commands on the remote server in a Bash shell
   set -e -o pipefail
 
