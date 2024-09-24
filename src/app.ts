@@ -363,7 +363,7 @@ export class App {
         }
 
         const asgName = `${this.config.project}-${podName}`;
-        const sshUser = podOptions.sshUser;
+        const { sshUser, bastionUser, bastionHost } = podOptions;
 
         for (const {
           PrivateIpAddress: ip,
@@ -409,7 +409,7 @@ export class App {
 
           // Swap the containers
           const connectResult =
-            await $`ssh -F /dev/null -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -a ${sshUser}@${ip} bash -s < ${new Response(
+            await $`ssh -T -F /dev/null -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${new Response(
               `# Execute these commands on the remote server in a Bash shell
   set -e -o pipefail
 
