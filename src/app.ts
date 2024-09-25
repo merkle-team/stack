@@ -331,8 +331,10 @@ export class App {
               `)}`;
                 if (connectResult.exitCode !== 0) {
                   console.error(
-                    'STDOUT', connectResult.stdout.toString(),
-                    'STDERR', connectResult.stderr.toString()
+                    "STDOUT",
+                    connectResult.stdout.toString(),
+                    "STDERR",
+                    connectResult.stderr.toString()
                   );
                   throw new Error(
                     `Error connecting to ${ip} (exit code ${connectResult.exitCode})`
@@ -478,8 +480,10 @@ export class App {
             )}`;
           if (connectResult.exitCode !== 0) {
             console.error(
-              'STDOUT', connectResult.stdout.toString(),
-              'STDERR', connectResult.stderr.toString()
+              "STDOUT",
+              connectResult.stdout.toString(),
+              "STDERR",
+              connectResult.stderr.toString()
             );
             throw new Error(
               `Error connecting to ${ip} (exit code ${connectResult.exitCode})`
