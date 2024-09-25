@@ -93,10 +93,7 @@ export class App {
     const results = await Promise.allSettled(
       stackIds.map(
         (stackId) =>
-          execa({
-            env: { CI: "true" },
-            all: true,
-          })`bunx cdktf plan --skip-synth ${stackId}`
+          execa({ all: true })`bunx cdktf plan --skip-synth ${stackId}`
       )
     );
     for (let i = 0; i < stackIds.length; i++) {
