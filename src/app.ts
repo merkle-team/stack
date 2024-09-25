@@ -282,14 +282,12 @@ export class App {
           return; // No instances to swap containers on
         }
 
-        // Filter down to instances that were already running, since new instances were likely created brand new by ASG itself
-        instancesForPod[podName] = alreadyRunningPodInstances.filter(
-          ({ InstanceId }) => alreadyRunningInstanceIds.has(InstanceId)
-        );
+        // Remember for later
+        instancesForPod[podName] = alreadyRunningPodInstances;
 
         const composeContents = readFileSync(podOptions.compose).toString();
         const pullResults = await Promise.allSettled(
-          alreadyRunningInstances.map(async ({ PrivateIpAddress: ip }) => {
+          alreadyRunningPodInstances.map(async ({ PrivateIpAddress: ip }) => {
             const startTime = Date.now();
             while (Date.now() - startTime < 120_000) {
               try {
@@ -299,7 +297,7 @@ export class App {
                 await $`ssh -T -F /dev/null -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${bastionUser}@${bastionHost}`;
 
                 console.log(
-                  `About to pull new containers on ${sshUser}@${ip}...`
+                  `About to pull new containers for pod ${podName} on ${sshUser}@${ip}...`
                 );
                 const connectResult =
                   await $`ssh -T -F /dev/null -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${new Response(`
