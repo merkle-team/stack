@@ -218,10 +218,12 @@ export class App {
 
   private async swapContainers(
     releaseId: string,
-    instances: EC2Instance[],
+    alreadyRunningInstances: EC2Instance[],
     podsToDeploy: string[]
   ) {
-    const instanceIds = new Set(instances.map((i) => i.InstanceId));
+    const alreadyRunningInstanceIds = new Set(
+      alreadyRunningInstances.map((i) => i.InstanceId)
+    );
     const asg = new AutoScaling({ region: this.config.region });
     const instancesForPod: Record<string, EC2Instance[]> = {};
 
@@ -259,33 +261,16 @@ export class App {
           }
         }
 
-        const ec2 = new EC2({ region: this.config.region });
-        const describeResult = await ec2.describeInstances({
-          Filters: [
-            {
-              Name: "tag:project",
-              Values: [this.config.project],
-            },
-            {
-              Name: "tag:pod",
-              Values: [podName],
-            },
-            {
-              Name: "instance-state-name",
-              Values: ["running"],
-            },
-          ],
-        });
-
-        const instances = describeResult.Reservations?.flatMap(
-          (reservation) => reservation.Instances || []
-        ).filter(
-          (instance) =>
-            instance.Tags?.find((tag) => tag.Key === "release")?.Value !==
-            releaseId // Skip instances on the latest release already
+        const alreadyRunningPodInstances = alreadyRunningInstances.filter(
+          (instance) => {
+            const instancePod = instance.Tags?.findLast(
+              (tag) => tag.Key === "pod"
+            )?.Value;
+            return instancePod === podName;
+          }
         );
 
-        if (!instances?.length) {
+        if (!alreadyRunningPodInstances?.length) {
           if (podOptions.singleton) {
             console.error(
               `No existing instances found for pod ${podName}, but desired capacity is > 0. Canceling deploy.`
@@ -298,13 +283,13 @@ export class App {
         }
 
         // Filter down to instances that were already running, since new instances were likely created brand new by ASG itself
-        instancesForPod[podName] = instances.filter(({ InstanceId }) =>
-          instanceIds.has(InstanceId)
+        instancesForPod[podName] = alreadyRunningPodInstances.filter(
+          ({ InstanceId }) => alreadyRunningInstanceIds.has(InstanceId)
         );
 
         const composeContents = readFileSync(podOptions.compose).toString();
         const pullResults = await Promise.allSettled(
-          instances.map(async ({ PrivateIpAddress: ip }) => {
+          alreadyRunningInstances.map(async ({ PrivateIpAddress: ip }) => {
             const startTime = Date.now();
             while (Date.now() - startTime < 120_000) {
               try {
