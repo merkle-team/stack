@@ -231,6 +231,7 @@ export class App {
     // when connecting via jump host
     await $`rm -f ~/.ssh/known_hosts`;
 
+    let updateFailed = false;
     const updateResults = await Promise.allSettled(
       Object.entries(this.config.pods).map(async ([podName, podOptions]) => {
         if (
@@ -304,7 +305,7 @@ export class App {
         );
 
         const composeContents = readFileSync(podOptions.compose).toString();
-        const results = await Promise.allSettled(
+        const pullResults = await Promise.allSettled(
           instances.map(async ({ PrivateIpAddress: ip }) => {
             const startTime = Date.now();
             while (Date.now() - startTime < 120_000) {
@@ -356,11 +357,15 @@ export class App {
             }
           })
         );
-        console.log("RESULTS OF PROMISES", results);
+        for (const result of pullResults) {
+          if (result.status === "rejected") {
+            updateFailed = true;
+            console.error(result.reason);
+          }
+        }
       })
     );
 
-    let updateFailed = false;
     for (const result of updateResults) {
       if (result.status === "rejected") {
         updateFailed = true;
@@ -369,7 +374,7 @@ export class App {
     }
     if (updateFailed) {
       console.error(
-        "One or more pods failed to download the latest images specified in their respective Docker Compose file(s). Aborting deploy."
+        "One or more pods failed to download/start the latest images specified in their respective Docker Compose file(s). Aborting deploy."
       );
       process.exit(1);
     }
