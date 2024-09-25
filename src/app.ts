@@ -108,8 +108,8 @@ export class App {
         console.info(
           "↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓"
         );
-        console.log("exit status", result.value.exitCode);
         console.log(result.value.all);
+        console.log("exit status", result.value.exitCode);
       }
     }
 
