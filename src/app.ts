@@ -117,7 +117,7 @@ export class App {
     }
 
     if (failed.length) {
-      console.log("Failures", failed);
+      console.log("Plan failures", failed);
       process.exit(1);
     }
   }
