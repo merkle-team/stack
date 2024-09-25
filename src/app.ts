@@ -66,6 +66,14 @@ export class App {
     });
   }
 
+  private extractPodNames(stacks: string[]) {
+    return this.normalizeStackIds(stacks)
+      .filter((stackId) => stackId.startsWith(`${this.config.project}-pod-`))
+      .map((stackId) =>
+        stackId.replace(new RegExp(`^${this.config.project}-pod-`), "")
+      );
+  }
+
   public async synth(stacks: string[] = this.getAllStackIds()) {
     const child = await this.runCommand(
       ["bunx", "cdktf", "synth", ...this.normalizeStackIds(stacks)],
@@ -157,7 +165,7 @@ export class App {
     // Get current instances before making any changes
     const alreadyRunningInstances = this.options.applyOnly
       ? []
-      : await this.alreadyRunningInstances(stacks);
+      : await this.alreadyRunningInstances(this.extractPodNames(stacks));
 
     if (!this.options.skipApply) {
       const child = await this.runCommand(
@@ -191,6 +199,10 @@ export class App {
         {
           Name: "tag:project",
           Values: [this.config.project],
+        },
+        {
+          Name: "tag:pod",
+          Values: pods,
         },
         {
           Name: "instance-state-name",
