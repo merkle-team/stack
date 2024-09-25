@@ -293,12 +293,13 @@ export class App {
               try {
                 const { sshUser, bastionUser, bastionHost } = podOptions;
 
-                // Record the current host key (workaround for SSH client jump host bug)
-                await $`ssh -T -F /dev/null -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${bastionUser}@${bastionHost}`;
-
                 console.log(
                   `About to pull new containers for pod ${podName} on ${sshUser}@${ip}...`
                 );
+
+                // Record the current host key (workaround for SSH client jump host bug)
+                await $`ssh -T -F /dev/null -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${bastionUser}@${bastionHost}`;
+
                 const connectResult =
                   await $`ssh -T -F /dev/null -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${new Response(`
   ${generateDeployScript(
