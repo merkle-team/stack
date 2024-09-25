@@ -329,12 +329,11 @@ export class App {
     this.allowedPodSecrets(podName)
   )}
               `)}`;
-                console.log(
-                  "RESULT1",
-                  connectResult.text(),
-                  connectResult.stderr.toString()
-                );
                 if (connectResult.exitCode !== 0) {
+                  console.error(
+                    'STDOUT', connectResult.stdout.toString(),
+                    'STDERR', connectResult.stderr.toString()
+                  );
                   throw new Error(
                     `Error connecting to ${ip} (exit code ${connectResult.exitCode})`
                   );
@@ -477,12 +476,11 @@ export class App {
   ls -I current releases | sort | head -n -${MAX_RELEASES_TO_KEEP} | xargs --no-run-if-empty -I{} rm -rf releases/{}
           `
             )}`;
-          console.log(
-            "RESULT2",
-            connectResult.text(),
-            connectResult.stderr.toString()
-          );
           if (connectResult.exitCode !== 0) {
+            console.error(
+              'STDOUT', connectResult.stdout.toString(),
+              'STDERR', connectResult.stderr.toString()
+            );
             throw new Error(
               `Error connecting to ${ip} (exit code ${connectResult.exitCode})`
             );
