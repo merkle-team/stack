@@ -743,10 +743,14 @@ export class App {
   }
 
   private extractPodNames(stacks: string[]) {
-    return this.normalizeStackIds(stacks)
-      .filter((stackId) => stackId.startsWith(`${this.config.project}-pod-`))
-      .map((stackId) =>
-        stackId.replace(new RegExp(`^${this.config.project}-pod-`), "")
-      );
+    const normalizedStacks = this.normalizeStackIds(stacks).filter((stackId) =>
+      stackId.startsWith(`${this.config.project}-pod-`)
+    );
+
+    console.log("Normalized stacks", normalizedStacks);
+
+    return normalizedStacks.map((stackId) =>
+      stackId.replace(new RegExp(`^${this.config.project}-pod-`), "")
+    );
   }
 }
