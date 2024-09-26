@@ -132,6 +132,10 @@ export class App {
       ? []
       : await this.alreadyRunningInstances(podNames);
 
+    console.log(
+      `Detected ${alreadyRunningInstances.length} already running instances`
+    );
+
     if (!this.options.skipApply) {
       const child = await this.runCommand(
         [
