@@ -149,7 +149,7 @@ export class App {
         ],
         { env: { ...process.env, ...TF_ENVARS } }
       );
-      return child.exited;
+      if (child.exitCode !== 0) return child.exited;
     }
 
     // Only perform a swap if there are already running instances.
