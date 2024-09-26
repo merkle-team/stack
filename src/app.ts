@@ -4,7 +4,6 @@ import { DeployConfig, parseConfig } from "./config";
 import { App as CdkApp } from "cdktf";
 import { EC2, Instance as EC2Instance } from "@aws-sdk/client-ec2";
 import { lb } from "@cdktf/provider-aws";
-import { spawn } from "child_process";
 import { sleep } from "./util";
 import { AutoScaling, LifecycleState } from "@aws-sdk/client-auto-scaling";
 import { LoadBalancerStack } from "./stacks/LoadBalancerStack";
