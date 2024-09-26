@@ -89,7 +89,7 @@ export class App {
     const stackIds = stacks.length
       ? this.normalizeStackIds(stacks)
       : this.getAllStackIds();
-    const podNames = this.extractPodNames(stacks);
+    const podNames = this.extractPodNames(stackIds);
 
     console.info("Deploying stacks:", stackIds);
     console.info("Pods to deploy:", podNames);
@@ -743,6 +743,7 @@ export class App {
   }
 
   private extractPodNames(stacks: string[]) {
+    console.log("Prefix", `${this.config.project}-pod-`);
     const normalizedStacks = this.normalizeStackIds(stacks).filter((stackId) =>
       stackId.startsWith(`${this.config.project}-pod-`)
     );
