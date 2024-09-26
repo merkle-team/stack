@@ -46,7 +46,7 @@ program
   )
   .action(async (stacks, options) => {
     const app = new App(CLI_PATH, program.opts());
-    await app.synth(stacks);
+    process.exit(await app.synth(stacks));
   });
 
 program
@@ -59,7 +59,7 @@ program
   )
   .action(async (options) => {
     const app = new App(CLI_PATH, program.opts());
-    await app._synth({ ...options });
+    process.exit(await app._synth({ ...options }));
   });
 
 program
@@ -78,7 +78,7 @@ program
   .option("--apply-only", "Skip the deploy step after the apply", false)
   .action(async (pods, options) => {
     const app = new App(CLI_PATH, { ...program.opts(), ...options });
-    await app.deploy(pods);
+    process.exit(await app.deploy(pods));
   });
 
 program
@@ -91,7 +91,7 @@ program
   )
   .action(async (stacks) => {
     const app = new App(CLI_PATH, program.opts());
-    await app.plan(stacks);
+    process.exit(await app.plan(stacks));
   });
 
 program
@@ -104,7 +104,7 @@ program
   )
   .action(async (stacks) => {
     const app = new App(CLI_PATH, program.opts());
-    await app.destroy(stacks);
+    process.exit(await app.destroy(stacks));
   });
 
 program
@@ -112,7 +112,7 @@ program
   .description("Validate configuration and report any issues/errors")
   .action(async () => {
     const app = new App(CLI_PATH, program.opts());
-    await app.lint();
+    process.exit(await app.lint());
   });
 
 program
@@ -121,7 +121,7 @@ program
   .argument("pod", "Pod to connect to")
   .action(async (pod) => {
     const app = new App(CLI_PATH, program.opts());
-    await app.console(pod);
+    process.exit(await app.console(pod));
   });
 
 program.parse(process.argv);
