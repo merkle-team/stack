@@ -507,8 +507,17 @@ export class App {
       return 1;
     }
 
-    const sshUser = this.config.pods[pod].sshUser as string;
     if (instances.length === 1) {
+      const instancePod = instances[0].Tags?.findLast(
+        (tag) => tag.Key === "pod"
+      )?.Value;
+
+      if (!instancePod) {
+        throw new Error(
+          `Unable to determine pod for instance ${instances[0].InstanceId}`
+        );
+      }
+      const sshUser = this.config.pods[instancePod].sshUser as string;
       // Only one to chose from, so select automatically
       return this.sshInto(sshUser, instances[0].PrivateIpAddress as string);
     }
@@ -532,30 +541,22 @@ export class App {
       );
     }
 
-    const fzf = spawn(`echo "${candidates.join("\n")}" | fzf --height=~10`, {
-      stdio: ["inherit", "pipe", "inherit"],
-      shell: true,
-    });
+    const fzf = await $`fzf --height=~10 < ${new Response(
+      candidates.join("\n")
+    )}`;
 
-    const output: string[] = [];
-    fzf.stdout.setEncoding("utf-8");
-    fzf.stdout.on("readable", function () {
-      const chunk = fzf.stdout.read();
-      if (chunk !== null) output.push(chunk);
-    });
-
-    fzf.on("exit", (code) => {
-      const choice = output.join("").trim();
-      if (code === 0) {
-        const [instanceId, privateIp, , pod] = choice.split(/\s+/);
-        console.info(
-          `Connecting to pod ${pod} (${instanceId}) at ${privateIp}...`
-        );
-        this.sshInto(sshUser, privateIp);
-      } else {
-        console.error("No instance selected");
-      }
-    });
+    const choice = fzf.stdout.toString().trim();
+    if (fzf.exitCode === 0) {
+      const [instanceId, privateIp, , pod] = choice.split(/\s+/);
+      console.info(
+        `Connecting to pod ${pod} (${instanceId}) at ${privateIp}...`
+      );
+      const sshUser = this.config.pods[pod].sshUser as string;
+      this.sshInto(sshUser, privateIp);
+    } else {
+      console.error("No instance selected");
+      return 1;
+    }
 
     return 0;
   }
