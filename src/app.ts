@@ -92,7 +92,6 @@ export class App {
     const podNames = this.extractPodNames(stackIds);
 
     console.info("Deploying stacks:", stackIds);
-    console.info("Pods to deploy:", podNames);
 
     const release = this.generateReleaseId();
 
@@ -743,15 +742,11 @@ export class App {
   }
 
   private extractPodNames(stacks: string[]) {
-    console.log("Prefix", `${this.config.project}-pod-`);
-    const normalizedStacks = this.normalizeStackIds(stacks).filter((stackId) =>
-      stackId.startsWith(`${this.config.project}-pod-`)
-    );
-
-    console.log("Normalized stacks", normalizedStacks);
-
-    return normalizedStacks.map((stackId) =>
-      stackId.replace(new RegExp(`^${this.config.project}-pod-`), "")
-    );
+    const podStackIdPrefix = `${this.config.project}-pod-`;
+    return this.normalizeStackIds(stacks)
+      .filter((stackId) => stackId.startsWith(podStackIdPrefix))
+      .map((stackId) =>
+        stackId.replace(new RegExp(`^${podStackIdPrefix}`), "")
+      );
   }
 }
