@@ -92,11 +92,14 @@ export class App {
     const podNames = this.extractPodNames(stacks);
 
     console.info("Deploying stacks:", stackIds);
+    console.info("Pods to deploy:", podNames);
 
     const release = this.generateReleaseId();
 
     for (const [podName, podConfig] of Object.entries(this.config.pods)) {
-      if (podNames.length > 0 && !podNames.includes(podName)) continue;
+      if (podNames.length > 0 && !podNames.includes(podName)) {
+        continue;
+      }
 
       if (Array.isArray(podConfig.environment)) {
         for (const envName of podConfig.environment) {
