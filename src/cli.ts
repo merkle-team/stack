@@ -118,10 +118,10 @@ program
 program
   .command("console")
   .description("Open a console to a pod in this stack")
-  .argument("pod", "Pod to connect to")
+  .argument("[pod]", "Pod to connect to")
   .action(async (pod) => {
     const app = new App(CLI_PATH, program.opts());
-    process.exit(await app.console(pod));
+    process.exit(await app.console((pod || "").replace(/^pod:/, "")));
   });
 
 program.parse(process.argv);
