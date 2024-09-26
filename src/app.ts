@@ -15,6 +15,8 @@ import { execa } from "execa";
 const MAX_RELEASES_TO_KEEP = 3;
 const TF_ENVARS = { TF_IN_AUTOMATION: "1" };
 
+type ExitStatus = number;
+
 export class App {
   private config: DeployConfig;
 
@@ -27,61 +29,17 @@ export class App {
     this.createCdktfJson();
   }
 
-  private createCdktfJson() {
-    writeFileSync(
-      "./cdktf.json",
-      JSON.stringify({
-        app: `bun ${this.cliPath} _cdktf-synth`,
-        language: "typescript",
-      })
-    );
-  }
-
-  private generateReleaseId() {
-    if (process.env.RELEASE !== undefined) return process.env.RELEASE;
-    return `${new Date()
-      .toISOString()
-      .replace(/\:/g, "-")
-      .replace(/\./g, "-")
-      .replace("Z", "z")}`;
-  }
-
-  private getAllStackIds() {
-    const stackIds = Object.keys(this.config.loadBalancers || {})
-      .map((lbName) => `${this.config.project}-lb-${lbName}`)
-      .concat(
-        Object.keys(this.config.pods || {}).map(
-          (podName) => `${this.config.project}-pod-${podName}`
-        )
-      );
-    return stackIds;
-  }
-
-  private normalizeStackIds(stacks: string[]) {
-    return stacks.map((stackId) => {
-      if (stackId.startsWith(`${this.config.project}-`)) {
-        return stackId.replace(":", "-");
-      }
-      return `${this.config.project}-${stackId.replace(":", "-")}`;
-    });
-  }
-
-  private extractPodNames(stacks: string[]) {
-    return this.normalizeStackIds(stacks)
-      .filter((stackId) => stackId.startsWith(`${this.config.project}-pod-`))
-      .map((stackId) =>
-        stackId.replace(new RegExp(`^${this.config.project}-pod-`), "")
-      );
-  }
-
-  public async synth(stacks: string[] = this.getAllStackIds()) {
+  public async synth(
+    stacks: string[] = this.getAllStackIds()
+  ): Promise<ExitStatus> {
     const child = await this.runCommand(
       ["bunx", "cdktf", "synth", ...this.normalizeStackIds(stacks)],
       { env: { ...process.env, ...TF_ENVARS } }
     );
+    return child.exitCode || -1;
   }
 
-  public async plan(stacks: string[]) {
+  public async plan(stacks: string[]): Promise<ExitStatus> {
     const stackIds = stacks.length
       ? this.normalizeStackIds(stacks)
       : this.getAllStackIds();
@@ -115,21 +73,30 @@ export class App {
 
     if (failed.length) {
       console.log("Plan failures", failed);
-      process.exit(1);
+      return 1;
     }
+
+    return 0;
   }
 
-  public async deploy(stacks: string[]) {
+  public async deploy(stacks: string[]): Promise<ExitStatus> {
     if (this.options.applyOnly && this.options.skipApply) {
       throw new Error(
         "Cannot specify --apply-only and --skip-apply as they are mutually exclusive"
       );
     }
 
+    const stackIds = stacks.length
+      ? this.normalizeStackIds(stacks)
+      : this.getAllStackIds();
+    const podNames = this.extractPodNames(stacks);
+
+    console.info("Deploying stacks:", stackIds);
+
     const release = this.generateReleaseId();
 
     for (const [podName, podConfig] of Object.entries(this.config.pods)) {
-      if (stacks.length > 0 && !stacks.includes(podName)) continue;
+      if (podNames.length > 0 && !podNames.includes(podName)) continue;
 
       if (Array.isArray(podConfig.environment)) {
         for (const envName of podConfig.environment) {
@@ -163,7 +130,7 @@ export class App {
     // Get current instances before making any changes
     const alreadyRunningInstances = this.options.applyOnly
       ? []
-      : await this.alreadyRunningInstances(this.extractPodNames(stacks));
+      : await this.alreadyRunningInstances(podNames);
 
     if (!this.options.skipApply) {
       const child = await this.runCommand(
@@ -172,48 +139,22 @@ export class App {
           "cdktf",
           "apply",
           ...(this.options.yes ? ["--auto-approve"] : []),
-          ...this.normalizeStackIds(stacks),
+          ...stackIds,
         ],
         { env: { ...process.env, ...TF_ENVARS } }
       );
 
-      if (child.exitCode !== 0) process.exit(child.exitCode);
+      return child.exitCode || -1;
     }
 
     // Only perform a swap if there are already running instances.
     if (!this.options.applyOnly && alreadyRunningInstances.length) {
-      await this.swapContainers(release, alreadyRunningInstances, stacks);
+      await this.swapContainers(release, alreadyRunningInstances, stackIds);
     }
 
     // TODO: Wait until all ASGs are healthy and at desired count
 
-    process.exit(0);
-  }
-
-  private async alreadyRunningInstances(pods: string[]) {
-    const ec2 = new EC2({ region: this.config.region });
-    const result = await ec2.describeInstances({
-      Filters: [
-        {
-          Name: "tag:project",
-          Values: [this.config.project],
-        },
-        {
-          Name: "tag:pod",
-          Values: pods,
-        },
-        {
-          Name: "instance-state-name",
-          Values: ["running"],
-        },
-      ],
-    });
-
-    const instances = result.Reservations?.flatMap(
-      (reservation) => reservation.Instances || []
-    );
-
-    return instances || [];
+    return 0;
   }
 
   private async swapContainers(
@@ -359,7 +300,7 @@ export class App {
       console.error(
         "One or more pods failed to download/start the latest images specified in their respective Docker Compose file(s). Aborting deploy."
       );
-      process.exit(1);
+      return 1;
     }
 
     // Swap all instances to start using the new containers
@@ -494,11 +435,13 @@ export class App {
       console.error(
         "One or more pods failed to start up the latest containers. Aborting deploy."
       );
-      process.exit(1);
+      return 1;
     }
+
+    return 0;
   }
 
-  public async destroy(stacks: string[]) {
+  public async destroy(stacks: string[]): Promise<ExitStatus> {
     const stackIds = stacks.length
       ? this.normalizeStackIds(stacks)
       : this.getAllStackIds();
@@ -514,17 +457,20 @@ export class App {
       ],
       { env: { ...process.env, ...TF_ENVARS } }
     );
+
+    return child.exitCode || -1;
   }
 
-  public async lint() {
+  public async lint(): Promise<ExitStatus> {
+    // By the time we reach here the configuration has already been validated
     console.info(`Stack configuration '${this.options.config}' is valid`);
-    process.exit(0);
+    return 0;
   }
 
-  public async console(pod: string) {
+  public async console(pod: string): Promise<ExitStatus> {
     if (pod && !this.config.pods[pod]) {
       console.error(`Stack does not have a pod named ${pod}`);
-      process.exit(1);
+      return 1;
     }
 
     const ec2 = new EC2({ region: this.config.region });
@@ -559,13 +505,13 @@ export class App {
       } else {
         console.error("No running instances found in this stack");
       }
-      process.exit(1);
+      return 1;
     }
 
     const sshUser = this.config.pods[pod].sshUser as string;
     if (instances.length === 1) {
       // Only one to chose from, so select automatically
-      this.sshInto(sshUser, instances[0].PrivateIpAddress as string);
+      return this.sshInto(sshUser, instances[0].PrivateIpAddress as string);
     }
 
     const candidates: string[] = [];
@@ -610,11 +556,38 @@ export class App {
       } else {
         console.error("No instance selected");
       }
-      process.exit(0);
     });
+
+    return 0;
   }
 
-  private sshInto(sshUser: string, host: string) {
+  private async alreadyRunningInstances(pods: string[]) {
+    const ec2 = new EC2({ region: this.config.region });
+    const result = await ec2.describeInstances({
+      Filters: [
+        {
+          Name: "tag:project",
+          Values: [this.config.project],
+        },
+        {
+          Name: "tag:pod",
+          Values: pods,
+        },
+        {
+          Name: "instance-state-name",
+          Values: ["running"],
+        },
+      ],
+    });
+
+    const instances = result.Reservations?.flatMap(
+      (reservation) => reservation.Instances || []
+    );
+
+    return instances || [];
+  }
+
+  private sshInto(sshUser: string, host: string): ExitStatus {
     const sshResult = Bun.spawnSync(
       [
         "ssh",
@@ -633,7 +606,7 @@ export class App {
         stdio: ["inherit", "inherit", "inherit"],
       }
     );
-    process.exit(sshResult.exitCode);
+    return sshResult.exitCode;
   }
 
   // Internal use only. Exposed for CDKTF interoperability
@@ -691,6 +664,8 @@ export class App {
       });
     }
     app.synth();
+
+    return 0;
   }
 
   private async runCommand(
@@ -726,5 +701,52 @@ export class App {
       }
     }
     return allowedSecrets;
+  }
+
+  private createCdktfJson() {
+    writeFileSync(
+      "./cdktf.json",
+      JSON.stringify({
+        app: `bun ${this.cliPath} _cdktf-synth`,
+        language: "typescript",
+      })
+    );
+  }
+
+  private generateReleaseId() {
+    if (process.env.RELEASE !== undefined) return process.env.RELEASE;
+    return `${new Date()
+      .toISOString()
+      .replace(/\:/g, "-")
+      .replace(/\./g, "-")
+      .replace("Z", "z")}`;
+  }
+
+  private getAllStackIds() {
+    const stackIds = Object.keys(this.config.loadBalancers || {})
+      .map((lbName) => `${this.config.project}-lb-${lbName}`)
+      .concat(
+        Object.keys(this.config.pods || {}).map(
+          (podName) => `${this.config.project}-pod-${podName}`
+        )
+      );
+    return stackIds;
+  }
+
+  private normalizeStackIds(stacks: string[]) {
+    return stacks.map((stackId) => {
+      if (stackId.startsWith(`${this.config.project}-`)) {
+        return stackId.replace(":", "-");
+      }
+      return `${this.config.project}-${stackId.replace(":", "-")}`;
+    });
+  }
+
+  private extractPodNames(stacks: string[]) {
+    return this.normalizeStackIds(stacks)
+      .filter((stackId) => stackId.startsWith(`${this.config.project}-pod-`))
+      .map((stackId) =>
+        stackId.replace(new RegExp(`^${this.config.project}-pod-`), "")
+      );
   }
 }
