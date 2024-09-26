@@ -36,7 +36,7 @@ export class App {
       ["bunx", "cdktf", "synth", ...this.normalizeStackIds(stacks)],
       { env: { ...process.env, ...TF_ENVARS } }
     );
-    return child.exitCode || -1;
+    return child.exited;
   }
 
   public async plan(stacks: string[]): Promise<ExitStatus> {
@@ -143,8 +143,7 @@ export class App {
         ],
         { env: { ...process.env, ...TF_ENVARS } }
       );
-
-      return child.exitCode || -1;
+      return child.exited;
     }
 
     // Only perform a swap if there are already running instances.
@@ -457,8 +456,7 @@ export class App {
       ],
       { env: { ...process.env, ...TF_ENVARS } }
     );
-
-    return child.exitCode || -1;
+    return child.exited;
   }
 
   public async lint(): Promise<ExitStatus> {
