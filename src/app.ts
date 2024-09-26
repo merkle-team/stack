@@ -148,7 +148,7 @@ export class App {
 
     // Only perform a swap if there are already running instances.
     if (!this.options.applyOnly && alreadyRunningInstances.length) {
-      await this.swapContainers(release, alreadyRunningInstances, stackIds);
+      return this.swapContainers(release, alreadyRunningInstances, podNames);
     }
 
     // TODO: Wait until all ASGs are healthy and at desired count
@@ -160,10 +160,7 @@ export class App {
     releaseId: string,
     alreadyRunningInstances: EC2Instance[],
     podsToDeploy: string[]
-  ) {
-    const alreadyRunningInstanceIds = new Set(
-      alreadyRunningInstances.map((i) => i.InstanceId)
-    );
+  ): Promise<ExitStatus> {
     const asg = new AutoScaling({ region: this.config.region });
     const instancesForPod: Record<string, EC2Instance[]> = {};
 
@@ -174,10 +171,7 @@ export class App {
     let updateFailed = false;
     const updateResults = await Promise.allSettled(
       Object.entries(this.config.pods).map(async ([podName, podOptions]) => {
-        if (
-          podsToDeploy.length > 0 &&
-          !podsToDeploy.includes(`pod:${podName}`)
-        ) {
+        if (podsToDeploy.length > 0 && !podsToDeploy.includes(podName)) {
           return; // Skip pod
         }
 
@@ -305,8 +299,7 @@ export class App {
     // Swap all instances to start using the new containers
     const swapResults = await Promise.allSettled(
       Object.entries(this.config.pods).map(async ([podName, podOptions]) => {
-        if (podsToDeploy.length > 0 && !podsToDeploy.includes(`pod:${podName}`))
-          return; // Skip pod
+        if (podsToDeploy.length > 0 && !podsToDeploy.includes(podName)) return; // Skip pod
 
         if (podOptions.deploy.replaceWith !== "new-containers") {
           return; // Nothing to do
