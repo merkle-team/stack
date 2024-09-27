@@ -713,7 +713,7 @@ export class App {
   }
 
   private generateReleaseId() {
-    if (process.env.RELEASE !== undefined) return process.env.RELEASE;
+    if (process.env.RELEASE) return process.env.RELEASE;
     return `${new Date()
       .toISOString()
       .replace(/\:/g, "-")
