@@ -363,7 +363,7 @@ export class App {
           const connectResult =
             await $`ssh -T -F /dev/null -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${new Response(
               `# Execute these commands on the remote server in a Bash shell
-  set -e -o pipefail
+  set -ex -o pipefail
 
   # Stop the current release if there is one
   echo "Stopping containers on ${instanceId} ${ip} for current release $(cat /home/${sshUser}/releases/current)"
