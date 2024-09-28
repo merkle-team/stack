@@ -85,6 +85,7 @@ if [ ! -d /home/${sshUser}/releases/${releaseId} ]; then
   if [ -f /home/${sshUser}/releases/current ]; then
     echo "Downloading and preparing Docker images on \$INSTANCE_ID \$private_ipv4 before swapping containers"
     docker compose build --pull
+    docker compose pull --ignore-buildable --policy=always
   else 
     # Avoid weird errors on first boot; see https://github.com/moby/moby/issues/22074#issuecomment-856551466
     sudo systemctl restart docker
