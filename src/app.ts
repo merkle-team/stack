@@ -516,9 +516,15 @@ export class App {
           `Unable to determine pod for instance ${instances[0].InstanceId}`
         );
       }
-      const sshUser = this.config.pods[instancePod].sshUser as string;
+      const { sshUser, bastionUser, bastionHost } =
+        this.config.pods[instancePod];
       // Only one to chose from, so select automatically
-      return this.sshInto(sshUser, instances[0].PrivateIpAddress as string);
+      return this.sshInto(
+        sshUser,
+        instances[0].PrivateIpAddress as string,
+        bastionUser,
+        bastionHost
+      );
     }
 
     const candidates: string[] = [];
@@ -550,8 +556,8 @@ export class App {
       console.info(
         `Connecting to pod ${pod} (${instanceId}) at ${privateIp}...`
       );
-      const sshUser = this.config.pods[pod].sshUser as string;
-      this.sshInto(sshUser, privateIp);
+      const { sshUser, bastionUser, bastionHost } = this.config.pods[pod];
+      this.sshInto(sshUser, privateIp, bastionUser, bastionHost);
     } else {
       console.error("No instance selected");
       return 1;
@@ -586,10 +592,16 @@ export class App {
     return instances || [];
   }
 
-  private sshInto(sshUser: string, host: string): ExitStatus {
+  private sshInto(
+    sshUser: string,
+    host: string,
+    bastionUser?: string,
+    bastionHost?: string
+  ): ExitStatus {
     const sshResult = Bun.spawnSync(
       [
         "ssh",
+        ...(bastionUser ? ["-J", `${bastionUser}@${bastionHost}`] : []),
         ...(this.options.yes ? ["-o", "BatchMode=yes"] : []),
         "-o",
         "LogLevel=ERROR",
