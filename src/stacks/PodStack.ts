@@ -70,6 +70,7 @@ export class PodStack extends TerraformStack {
 
     const podRole = new IamRole(this, `${fullPodName}-role`, {
       name: fullPodName,
+      path: `/${options.project}/`,
       assumeRolePolicy: new DataAwsIamPolicyDocument(
         this,
         `${fullPodName}-assume-role-policy`,
@@ -103,6 +104,7 @@ export class PodStack extends TerraformStack {
       role: podRole.name,
       policyArn: new IamPolicy(this, `${fullPodName}-policy`, {
         name: `${fullPodName}-policy`,
+        path: `/${options.project}/`,
         description: `Policy for pod ${fullPodName}`,
         policy: new DataAwsIamPolicyDocument(
           this,
@@ -172,6 +174,13 @@ export class PodStack extends TerraformStack {
         ).json,
       }).arn,
     });
+
+    for (const rolePolicyArn of (podOptions.rolePolicies || [])) {
+      new IamRolePolicyAttachment(this, `${fullPodName}-policy-attachment`, {
+        role: podRole.name,
+        policyArn: rolePolicyArn,
+      });
+    }
 
     const podSg = new SmartSecurityGroup(this, fullPodName, {
       project: options.project,
@@ -533,7 +542,6 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         lifecycle: {
           // After we've created the ASG for the first time, this is managed separately
           ignoreChanges: [
-            "key_name", // Allow us to update the key for future instances, but don't affect existing infra
             "min_size",
             "max_size",
             "desired_capacity",

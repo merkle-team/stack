@@ -74,6 +74,8 @@ export const DeployConfigSchema = Type.Object({
       instanceType: Type.String(),
       publicIp: Type.Optional(Type.Boolean()),
 
+      rolePolicies: Type.Optional(Type.Array(Type.String())),
+
       initScript: Type.Optional(Type.String()),
 
       compose: Type.String(),
