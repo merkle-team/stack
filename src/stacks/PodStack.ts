@@ -175,8 +175,8 @@ export class PodStack extends TerraformStack {
       }).arn,
     });
 
-    for (const rolePolicyArn of (podOptions.rolePolicies || [])) {
-      new IamRolePolicyAttachment(this, `${fullPodName}-policy-attachment`, {
+    for (const rolePolicyArn of podOptions.rolePolicies || []) {
+      new IamRolePolicyAttachment(this, `${fullPodName}-policy-attachment-${rolePolicyArn.replace(':', '-').replace('/', '-')}`, {
         role: podRole.name,
         policyArn: rolePolicyArn,
       });
