@@ -557,13 +557,11 @@ export class App {
         `Connecting to pod ${pod} (${instanceId}) at ${privateIp}...`
       );
       const { sshUser, bastionUser, bastionHost } = this.config.pods[pod];
-      this.sshInto(sshUser, privateIp, bastionUser, bastionHost);
+      return this.sshInto(sshUser, privateIp, bastionUser, bastionHost);
     } else {
       console.error("No instance selected");
       return 1;
     }
-
-    return 0;
   }
 
   private async alreadyRunningInstances(pods: string[]) {
@@ -592,12 +590,19 @@ export class App {
     return instances || [];
   }
 
-  private sshInto(
+  private async sshInto(
     sshUser: string,
     host: string,
     bastionUser?: string,
     bastionHost?: string
-  ): ExitStatus {
+  ): Promise<ExitStatus> {
+    if (bastionUser && bastionHost) {
+      // Accept the SSH host key for the bastion automatically (we don't store host keys)
+      await execa({
+        all: true,
+      })`ssh -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${bastionUser}@${bastionHost} true`;
+    }
+
     const sshResult = Bun.spawnSync(
       [
         "ssh",
