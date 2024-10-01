@@ -176,10 +176,16 @@ export class PodStack extends TerraformStack {
     });
 
     for (const rolePolicyArn of podOptions.rolePolicies || []) {
-      new IamRolePolicyAttachment(this, `${fullPodName}-policy-attachment-${rolePolicyArn.replace(':', '-').replace('/', '-')}`, {
-        role: podRole.name,
-        policyArn: rolePolicyArn,
-      });
+      new IamRolePolicyAttachment(
+        this,
+        `${fullPodName}-policy-attachment-${rolePolicyArn
+          .replace(":", "-")
+          .replace("/", "-")}`,
+        {
+          role: podRole.name,
+          policyArn: rolePolicyArn,
+        }
+      );
     }
 
     const podSg = new SmartSecurityGroup(this, fullPodName, {

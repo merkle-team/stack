@@ -72,7 +72,7 @@ if [ ! -d /home/${sshUser}/releases/${releaseId} ]; then
         `sed -i.bak "s/^${secretName}=/${mappedName}=/" .pod.env`
     )
     .join("\n")}
-  rm .pod.env.bak
+  rm -f .pod.env.bak
 
   cat .static.env > .env
   echo "" >> .env
