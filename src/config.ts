@@ -162,12 +162,6 @@ export const DeployConfigSchema = Type.Object({
               healthCheck: Type.Optional(
                 Type.Object({
                   path: Type.Optional(Type.String()),
-                  successCodes: Type.Optional(
-                    Type.Union([
-                      Type.Integer({ minimum: 200, maximum: 599 }),
-                      Type.String(),
-                    ])
-                  ),
                   healthyThreshold: Type.Integer({ minimum: 1 }),
                   unhealthyThreshold: Type.Integer({ minimum: 1 }),
                   timeout: Type.Integer({ minimum: 1 }),

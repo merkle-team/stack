@@ -294,7 +294,6 @@ export class PodStack extends TerraformStack {
             endpointOptions.target.healthCheck?.healthyThreshold,
           unhealthyThreshold:
             endpointOptions.target.healthCheck?.unhealthyThreshold,
-          matcher: endpointOptions.target.healthCheck?.successCodes?.toString(),
           path: endpointOptions.target.healthCheck?.path,
           port: endpointOptions.target.port.toString(),
           protocol: endpointOptions.target.protocol,
