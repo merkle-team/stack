@@ -285,7 +285,7 @@ export class PodStack extends TerraformStack {
         protocol: endpointOptions.target.protocol,
         vpcId: options.vpcId,
         deregistrationDelay:
-          endpointOptions.target.deregistration?.delay.toString(),
+          endpointOptions.target.deregistration?.delay?.toString(),
         connectionTermination:
           endpointOptions.target.deregistration?.action ===
           "force-terminate-connection",
@@ -294,7 +294,6 @@ export class PodStack extends TerraformStack {
             endpointOptions.target.healthCheck?.healthyThreshold,
           unhealthyThreshold:
             endpointOptions.target.healthCheck?.unhealthyThreshold,
-          path: endpointOptions.target.healthCheck?.path,
           port: endpointOptions.target.port.toString(),
           protocol: endpointOptions.target.protocol,
           timeout: endpointOptions.target.healthCheck?.timeout,
