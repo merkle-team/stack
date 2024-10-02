@@ -139,12 +139,13 @@ export class PodStack extends TerraformStack {
                   "secretsmanager:ListSecretVersionIds",
                 ],
                 effect: anySecrets ? "Allow" : "Deny",
-                resources: anySecrets
-                  ? Object.keys(options.secretMappings).map(
-                      (secretName) =>
-                        `arn:aws:secretsmanager:${options.region}:${callerIdentity.accountId}:secret:${secretName}-*`
-                    )
-                  : ["*"],
+                resources: ["*"],
+                // resources: anySecrets
+                //   ? Object.keys(options.secretMappings).map(
+                //       (secretName) =>
+                //         `arn:aws:secretsmanager:${options.region}:${callerIdentity.accountId}:secret:${secretName}-*`
+                //     )
+                //   : ["*"],
               },
               {
                 actions: ["ec2:CreateTags"],
