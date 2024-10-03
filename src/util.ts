@@ -16,6 +16,9 @@ export function generateDeployScript(
 ) {
   const sshUser = podOptions.sshUser;
 
+  const secretNames = Object.keys(secretNameMappings);
+  const secretBatchSize = 20;
+
   return `#!/bin/bash
 set -e -o pipefail
 
@@ -56,12 +59,19 @@ if [ ! -d /home/${sshUser}/releases/${releaseId} ]; then
     generateEnvVarsForPod(podOptions)
   )}" | base64 -d >> .pod.env
   echo "" >> .pod.env 
-  # TODO: Handle case where there are more than 100 secrets
-  aws secretsmanager batch-get-secret-value --secret-id-list ${Object.keys(
-    secretNameMappings
-  ).join(
-    " "
-  )} --output json | jq -r '.SecretValues[] | .Name + "=" + .SecretString' >> .pod.env
+
+  # Fetch secrets in batches and write to .pod.env
+  ${Array.from(
+    { length: Math.ceil(secretNames.length / secretBatchSize) },
+    (_, i) => secretNames.slice(i * secretBatchSize, (i + 1) * secretBatchSize)
+  )
+    .map(
+      (batch) =>
+        `aws secretsmanager batch-get-secret-value --secret-id-list ${batch.join(
+          " "
+        )} --output json | jq -r '.SecretValues[] | .Name + "=" + .SecretString' >> .pod.env`
+    )
+    .join("\n")}
   chmod 400 .pod.env
 
   # Replace envar names with mapped names for this pod
