@@ -90,6 +90,23 @@ export class App {
       : this.getAllStackIds();
     const podNames = this.extractPodNames(stackIds);
 
+    // Find any other stacks that need to be included in the deploy (e.g. load balancers)
+    for (const [podName, podConfig] of Object.entries(this.config.pods)) {
+      if (podNames.length > 0 && !podNames.includes(podName)) {
+        continue;
+      }
+      const referencedLbs = Object.values(podConfig.endpoints || {})
+        .map((endpointConfig) => endpointConfig.loadBalancer?.name)
+        .filter((item) => !!item) as string[];
+      for (const stackId of referencedLbs.map(
+        (lbName) => `${this.config.project}-lb-${lbName}`
+      )) {
+        if (!stackIds.includes(stackId)) {
+          stackIds.push(stackId);
+        }
+      }
+    }
+
     console.info("Deploying stacks:", stackIds);
 
     const release = this.generateReleaseId();
