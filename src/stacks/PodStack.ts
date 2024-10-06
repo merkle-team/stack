@@ -506,14 +506,9 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
             maxHealthyPercentage: podOptions.autoscaling.maxHealthyPercentage,
             autoRollback: true,
             scaleInProtectedInstances: "Wait",
+            skipMatching: true,
             standbyInstances: "Wait",
-            instanceWarmup: "0",
           },
-          // Only trigger instance refresh if we are using the ASG for deployment
-          triggers:
-            podOptions.deploy.replaceWith === "new-instances"
-              ? ["launch_template"]
-              : undefined,
         },
 
         mixedInstancesPolicy: {
@@ -560,7 +555,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
       // HACK: Wait for ASG to refresh itself before continuing
       new NullResource(this, `${fullPodName}-wait-for-asg`, {
         dependsOn:
-          podOptions.deploy.replaceWith === "new-containers" ? [asg] : [],
+          podOptions.deploy.replaceWith === "new-instances" ? [asg] : [],
       });
     }
   }
