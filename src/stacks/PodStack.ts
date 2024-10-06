@@ -495,23 +495,22 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         },
         waitForElbCapacity: podOptions.autoscaling.minHealthyInstances,
 
-        instanceRefresh:
-          podOptions.deploy.replaceWith === "new-instances"
-            ? {
-                strategy: "Rolling",
-                preferences: {
-                  minHealthyPercentage:
-                    podOptions.autoscaling.minHealthyPercentage,
-                  maxHealthyPercentage:
-                    podOptions.autoscaling.maxHealthyPercentage,
-                  autoRollback: true,
-                  scaleInProtectedInstances: "Wait",
-                  standbyInstances: "Wait",
-                  instanceWarmup: "0",
-                },
-                triggers: ["launch_template"],
-              }
-            : undefined,
+        instanceRefresh: {
+          strategy: "Rolling",
+          preferences: {
+            minHealthyPercentage: podOptions.autoscaling.minHealthyPercentage,
+            maxHealthyPercentage: podOptions.autoscaling.maxHealthyPercentage,
+            autoRollback: true,
+            scaleInProtectedInstances: "Wait",
+            standbyInstances: "Wait",
+            instanceWarmup: "0",
+          },
+          // Only trigger instance refresh if we are using the ASG for deployment
+          triggers:
+            podOptions.deploy.replaceWith === "new-instances"
+              ? ["launch_template"]
+              : undefined,
+        },
 
         mixedInstancesPolicy: {
           instancesDistribution: {
@@ -523,7 +522,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
           launchTemplate: {
             launchTemplateSpecification: {
               launchTemplateName: lt.name,
-              version: "$Latest",
+              version: lt.latestVersion.toString(),
             },
           },
         },
