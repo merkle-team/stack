@@ -25,6 +25,7 @@ import { Instance } from "@cdktf/provider-aws/lib/instance";
 import { stringToBase64 } from "uint8array-extras";
 import { TerraformStateBackend } from "../constructs/TerraformStateBackend";
 import * as zlib from "zlib";
+import { Resource as NullResource } from "@cdktf/provider-null/lib/resource";
 
 type PodStackOptions = {
   releaseId: string;
@@ -551,6 +552,12 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
             "wait_for_elb_capacity",
           ],
         },
+      });
+
+      // HACK: Wait for ASG to refresh itself before continuing
+      new NullResource(this, "wait-for-asg", {
+        dependsOn:
+          podOptions.deploy.replaceWith === "new-containers" ? [asg] : [],
       });
     }
   }
