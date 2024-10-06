@@ -170,7 +170,11 @@ export class App {
 
     // Only perform a swap if there are already running instances.
     if (!this.options.applyOnly && alreadyRunningInstances.length) {
-      return this.swapContainers(release, alreadyRunningInstances, podNames);
+      // It's possible the above apply command removed instances, so need to check again
+      const currentlyRunningInstances = await this.alreadyRunningInstances(
+        podNames
+      );
+      return this.swapContainers(release, currentlyRunningInstances, podNames);
     }
 
     // TODO: Wait until all ASGs are healthy and at desired count

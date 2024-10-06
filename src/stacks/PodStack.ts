@@ -546,13 +546,6 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
             "wait_for_elb_capacity",
           ],
         },
-
-        provisioners: [
-          {
-            type: "local-exec",
-            command: "echo 'Hello, world!'",
-          },
-        ],
       });
     }
   }
