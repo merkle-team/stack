@@ -523,7 +523,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
           launchTemplate: {
             launchTemplateSpecification: {
               launchTemplateName: lt.name,
-              version: "$LATEST",
+              version: "$Latest",
             },
           },
         },
