@@ -545,6 +545,8 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         ],
 
         lifecycle: {
+          createBeforeDestroy: true, // Create new ASG before destroying old one so there's no downtime
+
           // After we've created the ASG for the first time, this is managed separately
           ignoreChanges: [
             "min_size",
