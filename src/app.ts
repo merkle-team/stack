@@ -186,8 +186,6 @@ export class App {
     const asg = new AutoScaling({ region: this.config.region });
     const instancesForPod: Record<string, EC2Instance[]> = {};
 
-    console.log("Swapping containers for pods", podsToDeploy);
-
     // HACK: Clear known hosts file to avoid issues with SSH client
     // when connecting via jump host
     await $`rm -f ~/.ssh/known_hosts`;
