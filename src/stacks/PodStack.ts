@@ -522,7 +522,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
           launchTemplate: {
             launchTemplateSpecification: {
               launchTemplateName: lt.name,
-              version: "$Latest",
+              version: lt.latestVersion.toString(),
             },
           },
         },
