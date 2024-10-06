@@ -470,7 +470,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         throw new Error(`Pod ${fullPodName} must specify autoscaling options`);
       }
 
-      const asg = new AutoscalingGroup(this, options.shortName, {
+      const asg = new AutoscalingGroup(this, `${fullPodName}-asg`, {
         name: fullPodName,
         minSize: 1,
         maxSize: 2, // Allow deploy of a new instance without downtime
@@ -558,7 +558,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         `${fullPodName}-wait-for-asg`
       );
       if (podOptions.deploy.replaceWith === "new-instances") {
-        waitForRefresh.addOverride("depends_on", [asg]);
+        waitForRefresh.addOverride("depends_on", [asg.id]);
       }
       waitForRefresh.addOverride("provisioner.local-exec", {
         command: "sleep 30 && echo 'Done!'",
