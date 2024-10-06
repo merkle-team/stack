@@ -546,9 +546,13 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
             "wait_for_elb_capacity",
           ],
         },
-      });
-      asg.addOverride("provisioner.local-exec", {
-        command: "sleep 30 && echo 'Done!'",
+
+        provisioners: [
+          {
+            type: "local-exec",
+            command: "echo 'Hello, world!'",
+          },
+        ],
       });
     }
   }
