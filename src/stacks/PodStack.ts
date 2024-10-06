@@ -25,8 +25,6 @@ import { Instance } from "@cdktf/provider-aws/lib/instance";
 import { stringToBase64 } from "uint8array-extras";
 import { TerraformStateBackend } from "../constructs/TerraformStateBackend";
 import * as zlib from "zlib";
-import { Resource as NullResource } from "@cdktf/provider-null/lib/resource";
-import { NullProvider } from "@cdktf/provider-null/lib/provider";
 
 type PodStackOptions = {
   releaseId: string;
@@ -47,8 +45,6 @@ export class PodStack extends TerraformStack {
     new TerraformStateBackend(this, `${id}-state`, {
       region: options.region,
     });
-
-    new NullProvider(this, "null");
 
     new AwsProvider(this, "aws", {
       region: options.region,
@@ -551,16 +547,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
           ],
         },
       });
-
-      // HACK: Wait for ASG to refresh itself before continuing
-      const waitForRefresh = new NullResource(
-        this,
-        `${fullPodName}-wait-for-asg`,
-        {
-          dependsOn: [asg],
-        }
-      );
-      waitForRefresh.addOverride("provisioner.local-exec", {
+      asg.addOverride("provisioner.local-exec", {
         command: "sleep 30 && echo 'Done!'",
       });
     }
