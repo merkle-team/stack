@@ -553,9 +553,16 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
       });
 
       // HACK: Wait for ASG to refresh itself before continuing
-      new NullResource(this, `${fullPodName}-wait-for-asg`, {
-        dependsOn:
-          podOptions.deploy.replaceWith === "new-instances" ? [asg] : [],
+      const waitForRefresh = new NullResource(
+        this,
+        `${fullPodName}-wait-for-asg`,
+        {
+          dependsOn:
+            podOptions.deploy.replaceWith === "new-instances" ? [asg] : [],
+        }
+      );
+      waitForRefresh.addOverride("provisioner.local-exec", {
+        command: "sleep 30 && echo 'Done!'",
       });
     }
   }
