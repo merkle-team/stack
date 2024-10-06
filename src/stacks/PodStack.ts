@@ -425,6 +425,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
           resourceType: "instance",
           tags: {
             Name: `${fullPodName}-${releaseId}`, // Purely for visual in AWS console, no functional purpose
+            project: options.project,
             pod: options.shortName,
             release: releaseId,
           },
@@ -432,11 +433,6 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
       ],
 
       userData: Fn.sensitive(stringToBase64(userData)), // Hide in diffs since it's a large blob
-
-      lifecycle: {
-        // Ignore further changes since the launch template only matters on initial creation
-        ignoreChanges: ["tag_specifications", "user_data"],
-      },
     });
 
     if (podOptions.singleton) {
@@ -473,7 +469,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
       const asg = new AutoscalingGroup(this, options.shortName, {
         name: fullPodName,
         minSize: 1,
-        maxSize: 1,
+        maxSize: 2, // Allow deploy of a new instance without downtime
         desiredCapacity: 1,
         defaultInstanceWarmup: 60, // Give 1 minute for the instance to start up, download containers, and start before including in CloudWatch metrics
         defaultCooldown: 0, // Don't wait between scaling actions
