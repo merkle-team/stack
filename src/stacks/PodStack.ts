@@ -509,6 +509,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
                   standbyInstances: "Wait",
                   instanceWarmup: "0",
                 },
+                triggers: ["launch_template"],
               }
             : undefined,
 
@@ -522,7 +523,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
           launchTemplate: {
             launchTemplateSpecification: {
               launchTemplateName: lt.name,
-              version: lt.latestVersion.toString(),
+              version: "$LATEST",
             },
           },
         },
