@@ -472,7 +472,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
 
       const asgId = `${fullPodName}-asg`;
       const asg = new AutoscalingGroup(this, asgId, {
-        name: fullPodName,
+        namePrefix: `${fullPodName}-`,
         minSize: 1,
         maxSize: 2, // Allow deploy of a new instance without downtime
         desiredCapacity: 1,
