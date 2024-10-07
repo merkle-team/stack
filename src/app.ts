@@ -300,7 +300,9 @@ export class App {
           console.log(
             `${asgName}: ${refresh.Status} - ${
               refresh.PercentageComplete || 0
-            }% - Instances remaining: ${refresh.InstancesToUpdate}`
+            }% - Instances remaining: ${refresh.InstancesToUpdate} ${
+              refresh.ProgressDetails || "..."
+            }`
           );
           if (refresh.Status === "Successful") {
             console.log(`${asgName} deploy completed successfully`);
