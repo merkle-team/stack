@@ -549,7 +549,7 @@ export class App {
               ) {
                 break;
               }
-              if (Date.now() - beginTime > 120_000) {
+              if (Date.now() - beginTime > 180_000) {
                 throw new Error(
                   `Instance ${instanceId} (${ip}) did not enter Standby state within 180 seconds.`
                 );
