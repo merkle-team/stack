@@ -113,6 +113,7 @@ export const DeployConfigSchema = Type.Object({
           Type.Boolean({ default: true })
         ),
         shutdownTimeout: Type.Integer({ minimum: 0 }),
+        instanceRefreshTimeout: Type.Optional(Type.Integer({ minimum: 10 })),
       }),
 
       endpoints: Type.Optional(

@@ -177,9 +177,144 @@ export class App {
       return this.swapContainers(release, currentlyRunningInstances, podNames);
     }
 
-    // TODO: Wait until all ASGs are healthy and at desired count
+    // Since we may have triggered an instance refresh, wait until all ASGs are healthy
+    // and at desired count, or consider the deploy a failure
+    return await this.waitForInstanceRefreshes(podNames);
+  }
 
-    return 0;
+  private async waitForInstanceRefreshes(
+    podNames: string[]
+  ): Promise<ExitStatus> {
+    const asg = new AutoScaling({ region: this.config.region });
+
+    const asgs = await asg.describeAutoScalingGroups({
+      Filters: [
+        {
+          Name: "tag:project",
+          Values: [this.config.project],
+        },
+        ...(podNames.length
+          ? [
+              {
+                Name: "tag:pod",
+                Values: podNames,
+              },
+            ]
+          : []),
+      ],
+    });
+    if (!asgs.AutoScalingGroups?.length) {
+      console.warn("No ASGs found for project", this.config.project, podNames);
+      return 0;
+    }
+
+    // TODO: Add per-ASG timeout
+    const deployPromises = asgs.AutoScalingGroups.map(
+      ({ AutoScalingGroupName, Tags }) =>
+        this.waitForInstanceRefresh(AutoScalingGroupName as string, 600)
+    );
+
+    const results = await Promise.allSettled(deployPromises);
+    let deployFailed = false;
+    for (const result of results) {
+      if (result.status === "rejected") {
+        deployFailed = true;
+        console.error(result.reason);
+      }
+    }
+
+    if (deployFailed) {
+      const errMsg = "One or more ASGs failed to deploy";
+      console.error(errMsg);
+      return 1;
+    }
+
+    console.log("Deploy completed successfully");
+  }
+
+  private async waitForInstanceRefresh(
+    asgName: string,
+    timeoutMillis: number
+  ): Promise<void> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const abortController = new AbortController();
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => {
+        const errMsg = `Waiting for instance refresh to complete on ASG ${asgName} timed out after ${timeoutMillis}ms`;
+        const err = new Error(errMsg);
+        console.error(errMsg);
+        abortController.abort(err);
+        reject(err);
+      }, timeoutMillis);
+    });
+
+    return Promise.race([
+      timeoutPromise,
+      (async () => {
+        const asg = new AutoScaling({ region: this.config.region });
+        const refreshes =
+          (
+            await asg.describeInstanceRefreshes({
+              AutoScalingGroupName: asgName,
+              MaxRecords: 1, // Only need the most recent
+            })
+          ).InstanceRefreshes || [];
+        if (!refreshes.length) {
+          return; // No active refreshes triggered
+        }
+
+        // Remember refresh ID so we always monitor the
+        // same refresh (in case of multiple deploys)
+        const refreshId = refreshes[0].InstanceRefreshId as string;
+
+        while (!abortController.signal.aborted) {
+          const refreshes =
+            (
+              await asg.describeInstanceRefreshes({
+                InstanceRefreshIds: [refreshId],
+                AutoScalingGroupName: asgName,
+                MaxRecords: 1, // Only need the most recent
+              })
+            ).InstanceRefreshes || [];
+
+          if (!refreshes.length) {
+            // Shouldn't happen, but include for type safety
+            const errMsg = `No instance refresh found for refresh ID ${refreshId} for ASG ${asgName}`;
+            console.error(errMsg);
+            throw new Error(errMsg);
+          }
+
+          const [refresh] = refreshes;
+          console.log(
+            `${asgName}: ${refresh.Status} - ${refresh.PercentageComplete}% - Instances remaining: ${refresh.InstancesToUpdate}`
+          );
+          if (refresh.Status === "Successful") {
+            console.log(`${asgName} deploy completed successfully`);
+            return;
+          }
+          if (refresh.Status === "RollbackSuccessful") {
+            const errMsg = `${asgName} deploy rolled back!`;
+            console.error(errMsg);
+            throw new Error(errMsg);
+          }
+          if (refresh.Status === "RollbackFailed") {
+            const errMsg = `${asgName} deploy failed, and the rollback also failed!`;
+            console.error(errMsg);
+            throw new Error(errMsg);
+          }
+          if (refresh.Status === "Failed") {
+            const errMsg = `${asgName} deploy failed!`;
+            console.error(errMsg);
+            throw new Error(errMsg);
+          }
+          if (refresh.Status === "Cancelled") {
+            const errMsg = `${asgName} deploy canceled! Was another deploy initiated?`;
+            console.error(errMsg);
+            throw new Error(errMsg);
+          }
+        }
+      })(),
+    ]);
   }
 
   private async swapContainers(
