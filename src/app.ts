@@ -338,6 +338,7 @@ export class App {
     alreadyRunningInstances: EC2Instance[],
     podsToDeploy: string[]
   ): Promise<ExitStatus> {
+    const ec2 = new EC2({ region: this.config.region });
     const asg = new AutoScaling({ region: this.config.region });
     const instancesForPod: Record<string, EC2Instance[]> = {};
 
@@ -587,6 +588,33 @@ export class App {
             await asg.exitStandby({
               AutoScalingGroupName: asgName,
               InstanceIds: [instanceId as string],
+            });
+          }
+
+          if (podOptions.autoscaling) {
+            const latestVersions = (
+              await ec2.describeLaunchTemplateVersions({
+                LaunchTemplateName: asgName,
+                MaxResults: 1,
+              })
+            )?.LaunchTemplateVersions;
+            if (!latestVersions?.length) {
+              // Shouldn't happen, but include for type safety
+              throw new Error(
+                `No launch template versions found for ASG ${asgName}`
+              );
+            }
+
+            const latestVersion = latestVersions[0].VersionNumber;
+
+            // Manually update the launch template version, since if we do this with Terraform
+            // it causes an instance refresh which we want to avoid when swapping containers
+            await asg.updateAutoScalingGroup({
+              AutoScalingGroupName: asgName,
+              LaunchTemplate: {
+                LaunchTemplateName: asgName,
+                Version: latestVersion?.toString(),
+              },
             });
           }
         }
