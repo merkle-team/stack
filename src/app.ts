@@ -617,6 +617,7 @@ export class App {
           }
 
           if (podOptions.deploy.detachBeforeContainerSwap) {
+            console.log(`Re-enabling ${instanceId} in ASG ${asgName}`);
             // Re-attach to ASG so we start receiving traffic again
             await asg.exitStandby({
               AutoScalingGroupName: asgName,
