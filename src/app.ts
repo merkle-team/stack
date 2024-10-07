@@ -666,7 +666,9 @@ export class App {
           }
 
           if (podOptions.deploy.detachBeforeContainerSwap) {
-            console.log(`Re-enabling ${instanceId} in ASG ${asgName}`);
+            console.log(
+              `Moving instance ${instanceId} in ASG ${asgName} back to InService`
+            );
             // Re-attach to ASG so we start receiving traffic again
             await asg.exitStandby({
               AutoScalingGroupName: asgName,
