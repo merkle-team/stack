@@ -546,7 +546,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
             "wait_for_elb_capacity",
             // Don't trigger instance refresh if we're just swapping containers
             ...(podOptions.deploy.replaceWith === "new-containers"
-              ? ["mixed_instances_policy[0].launch_template[0].version"]
+              ? ["mixed_instances_policy[0].launch_template.version"]
               : []),
           ],
         },
