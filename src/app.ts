@@ -515,6 +515,15 @@ export class App {
           }
           asgName = asgResult.AutoScalingGroups[0]
             .AutoScalingGroupName as string;
+
+          // Make sure all instances are in-service (in case a prior deploy failed)
+          const instanceIds = instancesForPod[podName].map(
+            (i) => i.InstanceId as string
+          );
+          await asg.exitStandby({
+            AutoScalingGroupName: asgName,
+            InstanceIds: instanceIds,
+          });
         }
 
         const { sshUser, bastionUser, bastionHost } = podOptions;
