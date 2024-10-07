@@ -220,7 +220,7 @@ export class App {
     // TODO: Add per-ASG timeout
     const deployPromises = asgs.AutoScalingGroups.map(
       ({ AutoScalingGroupName, Tags }) =>
-        this.waitForInstanceRefresh(AutoScalingGroupName as string, 600)
+        this.waitForInstanceRefresh(AutoScalingGroupName as string, 600 * 1000)
     );
 
     const results = await Promise.allSettled(deployPromises);
