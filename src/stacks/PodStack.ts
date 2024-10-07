@@ -517,7 +517,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
           launchTemplate: {
             launchTemplateSpecification: {
               launchTemplateName: lt.name,
-              version: lt.latestVersion.toString(),
+              version: "$Latest",
             },
           },
         },
@@ -544,12 +544,6 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
             "max_size",
             "desired_capacity",
             "wait_for_elb_capacity",
-            // Don't trigger instance refresh if we're just swapping containers
-            ...(podOptions.deploy.replaceWith === "new-containers"
-              ? [
-                  "mixed_instances_policy[0].launch_template[0].launch_template_specification[0].version",
-                ]
-              : []),
           ],
         },
       });
