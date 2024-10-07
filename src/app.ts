@@ -520,10 +520,21 @@ export class App {
           const instanceIds = instancesForPod[podName].map(
             (i) => i.InstanceId as string
           );
-          await asg.exitStandby({
-            AutoScalingGroupName: asgName,
+
+          const asgInstances = await asg.describeAutoScalingInstances({
             InstanceIds: instanceIds,
           });
+
+          const standbyInstances =
+            asgInstances.AutoScalingInstances?.filter(
+              (instance) => instance.LifecycleState === LifecycleState.STANDBY
+            ).map((instance) => instance.InstanceId as string) || [];
+          if (standbyInstances.length) {
+            await asg.exitStandby({
+              AutoScalingGroupName: asgName,
+              InstanceIds: standbyInstances,
+            });
+          }
         }
 
         const { sshUser, bastionUser, bastionHost } = podOptions;
