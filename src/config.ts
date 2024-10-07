@@ -166,7 +166,7 @@ export const DeployConfigSchema = Type.Object({
                   healthyThreshold: Type.Integer({ minimum: 2, maximum: 10 }),
                   unhealthyThreshold: Type.Integer({ minimum: 2, maximum: 10 }),
                   timeout: Type.Integer({ minimum: 2, maximum: 120 }),
-                  interval: Type.Integer({ minimum: 1 }),
+                  interval: Type.Integer({ minimum: 5, maximum: 300 }),
                 })
               ),
             }),
