@@ -471,7 +471,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         minSize: 1,
         maxSize: 2, // Allow deploy of a new instance without downtime
         desiredCapacity: 1,
-        defaultInstanceWarmup: 60, // Give 1 minute for the instance to start up, download containers, and start before including in CloudWatch metrics
+        defaultInstanceWarmup: 0, // How long to wait after instance is InService before considering metrics from instance for scaling decisions
         defaultCooldown: 0, // Don't wait between scaling actions
         healthCheckGracePeriod: podOptions.autoscaling.healthCheckGracePeriod,
         healthCheckType: Object.keys(podOptions.endpoints || {}).length
