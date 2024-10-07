@@ -551,13 +551,13 @@ export class App {
               }
               if (Date.now() - beginTime > 120_000) {
                 throw new Error(
-                  `Instance ${instanceId} (${ip}) did not enter Standby state within 120 seconds.`
+                  `Instance ${instanceId} (${ip}) did not enter Standby state within 180 seconds.`
                 );
               }
               console.info(
                 `Waiting for instance ${instanceId} (${ip}) to enter Standby state...`
               );
-              await sleep(5000);
+              await sleep(10_000);
             }
           }
 
