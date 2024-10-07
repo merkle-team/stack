@@ -359,16 +359,28 @@ export class App {
 
         // If pod is part of ASG, check desired capacity before proceeding
         if (podOptions.autoscaling) {
-          const asgName = `${this.config.project}-${podName}`;
           const asgResult = await asg.describeAutoScalingGroups({
-            AutoScalingGroupNames: [asgName],
+            Filters: [
+              {
+                Name: "tag:project",
+                Values: [this.config.project],
+              },
+              {
+                Name: "tag:pod",
+                Values: [podName],
+              },
+            ],
           });
-          const group = asgResult.AutoScalingGroups?.find(
-            (asg) => asg.AutoScalingGroupName === asgName
-          );
+          if (!asgResult?.AutoScalingGroups?.length) {
+            // Shouldn't happen, but include for type safety
+            throw new Error(`No ASG found for pod ${podName}`);
+          }
+          const group = asgResult.AutoScalingGroups[0];
 
           if (group?.DesiredCapacity === 0) {
-            console.warn(`Desired capacity for ${asgName} is 0. Skipping`);
+            console.warn(
+              `Desired capacity for ${group.AutoScalingGroupName} is 0. Skipping`
+            );
             return;
           }
         }
@@ -483,7 +495,28 @@ export class App {
           return; // Nothing to do
         }
 
-        const asgName = `${this.config.project}-${podName}`;
+        let asgName = "...";
+        if (podOptions.autoscaling) {
+          const asgResult = await asg.describeAutoScalingGroups({
+            Filters: [
+              {
+                Name: "tag:project",
+                Values: [this.config.project],
+              },
+              {
+                Name: "tag:pod",
+                Values: [podName],
+              },
+            ],
+          });
+          if (!asgResult?.AutoScalingGroups?.length) {
+            // Shouldn't happen, but include for type safety
+            throw new Error(`No ASG found for pod ${podName}`);
+          }
+          asgName = asgResult.AutoScalingGroups[0]
+            .AutoScalingGroupName as string;
+        }
+
         const { sshUser, bastionUser, bastionHost } = podOptions;
 
         for (const {
@@ -556,7 +589,7 @@ export class App {
   echo "$new_release_dir" > /home/${sshUser}/releases/current
 
   # Update tags so we know which release this instance is currently on
-  aws ec2 create-tags --tags "Key=release,Value=${releaseId}" "Key=Name,Value=${asgName}-${releaseId}" --resource "\$(cat /etc/instance-id)"
+  aws ec2 create-tags --tags "Key=release,Value=${releaseId}" "Key=Name,Value=${this.config.project}-${podName}-${releaseId}" --resource "\$(cat /etc/instance-id)"
 
   # Start up all pod containers
   echo "Starting new containers on ${instanceId} ${ip} for new release ${releaseId}"
@@ -594,7 +627,7 @@ export class App {
           if (podOptions.autoscaling) {
             const latestVersions = (
               await ec2.describeLaunchTemplateVersions({
-                LaunchTemplateName: asgName,
+                LaunchTemplateName: `${this.config.project}-${podName}`,
                 MaxResults: 1,
               })
             )?.LaunchTemplateVersions;
@@ -612,7 +645,7 @@ export class App {
             await asg.updateAutoScalingGroup({
               AutoScalingGroupName: asgName,
               LaunchTemplate: {
-                LaunchTemplateName: asgName,
+                LaunchTemplateName: `${this.config.project}-${podName}`,
                 Version: latestVersion?.toString(),
               },
             });
