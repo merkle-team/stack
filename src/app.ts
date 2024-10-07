@@ -285,7 +285,7 @@ export class App {
               await asg.describeInstanceRefreshes({
                 InstanceRefreshIds: [refreshId],
                 AutoScalingGroupName: asgName,
-                MaxRecords: 1, // Only need the most recent
+                MaxRecords: 1,
               })
             ).InstanceRefreshes || [];
 
@@ -298,7 +298,9 @@ export class App {
 
           const [refresh] = refreshes;
           console.log(
-            `${asgName}: ${refresh.Status} - ${refresh.PercentageComplete}% - Instances remaining: ${refresh.InstancesToUpdate}`
+            `${asgName}: ${refresh.Status} - ${
+              refresh.PercentageComplete || 0
+            }% - Instances remaining: ${refresh.InstancesToUpdate}`
           );
           if (refresh.Status === "Successful") {
             console.log(`${asgName} deploy completed successfully`);
