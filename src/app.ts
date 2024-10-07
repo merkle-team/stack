@@ -525,15 +525,44 @@ export class App {
             InstanceIds: instanceIds,
           });
 
-          const standbyInstances =
+          const instancesInStandby =
             asgInstances.AutoScalingInstances?.filter(
               (instance) => instance.LifecycleState === LifecycleState.STANDBY
             ).map((instance) => instance.InstanceId as string) || [];
-          if (standbyInstances.length) {
+          if (instancesInStandby.length) {
             await asg.exitStandby({
               AutoScalingGroupName: asgName,
-              InstanceIds: standbyInstances,
+              InstanceIds: instancesInStandby,
             });
+
+            const exitStandbyStartTime = Date.now();
+            for (;;) {
+              const allInstances = await asg.describeAutoScalingInstances({
+                InstanceIds: instanceIds,
+              });
+              const allInstanceDetails =
+                allInstances.AutoScalingInstances || [];
+              if (
+                allInstanceDetails.every(
+                  (i) => i.LifecycleState === LifecycleState.IN_SERVICE
+                )
+              ) {
+                break;
+              }
+              if (Date.now() - exitStandbyStartTime > 180_000) {
+                throw new Error(
+                  `Standby Instances [${instancesInStandby.join(
+                    ", "
+                  )}] did not exit Standby state within 180 seconds.`
+                );
+              }
+              console.info(
+                `Waiting for instances [${instancesInStandby.join(
+                  ", "
+                )}] to exit Standby state...`
+              );
+              await sleep(5_000);
+            }
           }
         }
 
