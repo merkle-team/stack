@@ -544,6 +544,10 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
             "max_size",
             "desired_capacity",
             "wait_for_elb_capacity",
+            // Don't trigger instance refresh if we're just swapping containers
+            ...(podOptions.deploy.replaceWith === "new-instances"
+              ? ["launch_template[0].version"]
+              : []),
           ],
         },
       });
