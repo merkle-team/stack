@@ -547,7 +547,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
             // Don't trigger instance refresh if we're just swapping containers
             ...(podOptions.deploy.replaceWith === "new-containers"
               ? [
-                  "mixed_instances_policy[0].launch_template[0].launch_template_specification.version",
+                  "mixed_instances_policy[0].launch_template[0].launch_template_specification[0].version",
                 ]
               : []),
           ],
