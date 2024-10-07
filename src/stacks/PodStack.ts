@@ -299,6 +299,9 @@ export class PodStack extends TerraformStack {
           timeout: endpointOptions.target.healthCheck?.timeout,
           interval: endpointOptions.target.healthCheck?.interval,
         },
+        tags: {
+          pod: options.shortName,
+        },
       });
       tgs[endpointName] = tg;
 

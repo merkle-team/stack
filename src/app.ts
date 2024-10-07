@@ -204,14 +204,10 @@ export class App {
           Name: "tag:project",
           Values: [this.config.project],
         },
-        ...(podNames.length
-          ? [
-              {
-                Name: "tag:pod",
-                Values: podNames,
-              },
-            ]
-          : []),
+        {
+          Name: "tag:pod",
+          Values: podNames,
+        },
       ],
     });
     if (!asgs.AutoScalingGroups?.length) {
@@ -221,8 +217,21 @@ export class App {
 
     // TODO: Add per-ASG timeout
     const deployPromises = asgs.AutoScalingGroups.map(
-      ({ AutoScalingGroupName, Tags }) =>
-        this.waitForInstanceRefresh(AutoScalingGroupName as string, 600 * 1000)
+      ({ AutoScalingGroupName, Tags }) => {
+        const podName = Tags?.findLast((tag) => tag.Key === "pod")?.Value;
+        if (!podName) {
+          // Shouldn't happen, but check for type safety
+          throw new Error(
+            `ASG ${AutoScalingGroupName} does not have a pod tag`
+          );
+        }
+
+        return this.waitForInstanceRefresh(
+          AutoScalingGroupName as string,
+          (this.config.pods[podName].deploy?.instanceRefreshTimeout || 600) *
+            1000
+        );
+      }
     );
 
     const results = await Promise.allSettled(deployPromises);
@@ -299,8 +308,8 @@ export class App {
           const [refresh] = refreshes;
           console.log(
             `${asgName}: ${refresh.Status} - ${
-              refresh.PercentageComplete || 0
-            }% - Instances remaining: ${refresh.InstancesToUpdate} ${
+              refresh.PercentageComplete || "?"
+            }% - Instances remaining: ${refresh.InstancesToUpdate || "?"}. ${
               refresh.StatusReason || "..."
             }`
           );
