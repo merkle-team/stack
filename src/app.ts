@@ -230,6 +230,7 @@ export class App {
     }
 
     console.log("Deploy completed successfully");
+    return 0;
   }
 
   private async waitForInstanceRefresh(
