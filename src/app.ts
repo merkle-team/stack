@@ -322,6 +322,8 @@ export class App {
             console.error(errMsg);
             throw new Error(errMsg);
           }
+
+          await sleep(5_000);
         }
       })(),
     ]);
