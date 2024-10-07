@@ -301,7 +301,7 @@ export class App {
             `${asgName}: ${refresh.Status} - ${
               refresh.PercentageComplete || 0
             }% - Instances remaining: ${refresh.InstancesToUpdate} ${
-              refresh.ProgressDetails || "..."
+              refresh.StatusReason || "..."
             }`
           );
           if (refresh.Status === "Successful") {
@@ -309,22 +309,22 @@ export class App {
             return;
           }
           if (refresh.Status === "RollbackSuccessful") {
-            const errMsg = `${asgName} deploy rolled back!`;
+            const errMsg = `${asgName} deploy rolled back! ${refresh.StatusReason}`;
             console.error(errMsg);
             throw new Error(errMsg);
           }
           if (refresh.Status === "RollbackFailed") {
-            const errMsg = `${asgName} deploy failed, and the rollback also failed!`;
+            const errMsg = `${asgName} deploy failed, and the rollback also failed! ${refresh.StatusReason}`;
             console.error(errMsg);
             throw new Error(errMsg);
           }
           if (refresh.Status === "Failed") {
-            const errMsg = `${asgName} deploy failed!`;
+            const errMsg = `${asgName} deploy failed! ${refresh.StatusReason}`;
             console.error(errMsg);
             throw new Error(errMsg);
           }
           if (refresh.Status === "Cancelled") {
-            const errMsg = `${asgName} deploy canceled! Was another deploy initiated?`;
+            const errMsg = `${asgName} deploy canceled! Was another deploy initiated? ${refresh.StatusReason}`;
             console.error(errMsg);
             throw new Error(errMsg);
           }
