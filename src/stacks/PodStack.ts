@@ -297,6 +297,7 @@ export class PodStack extends TerraformStack {
           port: endpointOptions.target.port.toString(),
           protocol: endpointOptions.target.protocol,
           timeout: endpointOptions.target.healthCheck?.timeout,
+          interval: endpointOptions.target.healthCheck?.interval,
         },
       });
       tgs[endpointName] = tg;
