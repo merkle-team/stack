@@ -175,11 +175,13 @@ export class App {
       const currentlyRunningInstances = await this.alreadyRunningInstances(
         podNames
       );
-      swapStatus = await this.swapContainers(
-        release,
-        currentlyRunningInstances,
-        podNames
-      );
+      if (currentlyRunningInstances.length) {
+        swapStatus = await this.swapContainers(
+          release,
+          currentlyRunningInstances,
+          podNames
+        );
+      }
     }
 
     // Since we may have triggered an instance refresh, wait until all ASGs are healthy
