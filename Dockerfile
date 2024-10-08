@@ -61,6 +61,5 @@ COPY --from=prerelease /usr/src/app/package.json .
 
 # Silence annoying punycode deprecation warning, and increase heap size for CDKTF
 ENV NODE_OPTIONS="--disable-warning=DEP0040 --max-old-space-size=4096"
-ENV CDKTF_DISABLE_PLUGIN_CACHE_ENV=1
 
 ENTRYPOINT ["bun", "cli.js", "--workdir", "./workspace"]
