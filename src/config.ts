@@ -23,15 +23,17 @@ export const DeployConfigSchema = Type.Object({
   secrets: Type.Optional(
     Type.Record(
       Type.String(),
-      Type.Object({
-        as: Type.Optional(Type.String()),
-        pods: Type.Optional(
-          Type.Union([
-            Type.Array(Type.String(), { uniqueItems: true }),
-            Type.Record(Type.String(), Type.String()),
-          ])
-        ),
-      })
+      Type.Optional(
+        Type.Object({
+          as: Type.Optional(Type.String()),
+          pods: Type.Optional(
+            Type.Union([
+              Type.Array(Type.String(), { uniqueItems: true }),
+              Type.Record(Type.String(), Type.String()),
+            ])
+          ),
+        })
+      )
     )
   ),
 
