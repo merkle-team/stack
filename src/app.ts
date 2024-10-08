@@ -1003,7 +1003,10 @@ export class App {
         secretOptions.podsIncluded?.length &&
         secretOptions.podsIncluded?.includes(podName)
       ) {
-        allowedSecrets[secretName] = secretName; // Map to the same name
+        // Map to the same name, or rename if "as" is provided
+        allowedSecrets[secretName] = secretOptions.as
+          ? secretOptions.as
+          : secretName;
       } else if (
         typeof secretOptions.podsIncluded === "object" &&
         secretOptions.podsIncluded[podName] !== undefined

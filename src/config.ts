@@ -24,6 +24,7 @@ export const DeployConfigSchema = Type.Object({
     Type.Record(
       Type.String(),
       Type.Object({
+        as: Type.Optional(Type.String()),
         podsIncluded: Type.Union([
           Type.Array(Type.String(), { uniqueItems: true }),
           Type.Record(Type.String(), Type.String()),
@@ -214,6 +215,11 @@ export function parseConfig(configPath: string) {
         }
       }
     } else if (typeof secretConfig.podsIncluded === "object") {
+      if (secretConfig.as) {
+        throw new Error(
+          `Secret ${secretName} cannot specify both 'as' and 'podsIncluded' with individual secret name mappings for each pod`
+        );
+      }
       // If an object is provided, treat each key as the pod name and each value as the environment variable name mapping
       for (const podName of Object.keys(secretConfig.podsIncluded)) {
         if (!config.pods[podName]) {
