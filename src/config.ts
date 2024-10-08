@@ -25,10 +25,12 @@ export const DeployConfigSchema = Type.Object({
       Type.String(),
       Type.Object({
         as: Type.Optional(Type.String()),
-        podsIncluded: Type.Union([
-          Type.Array(Type.String(), { uniqueItems: true }),
-          Type.Record(Type.String(), Type.String()),
-        ]),
+        pods: Type.Optional(
+          Type.Union([
+            Type.Array(Type.String(), { uniqueItems: true }),
+            Type.Record(Type.String(), Type.String()),
+          ])
+        ),
       })
     )
   ),
@@ -206,22 +208,27 @@ export function parseConfig(configPath: string) {
   for (const [secretName, secretConfig] of Object.entries(
     config.secrets || {}
   )) {
-    if (Array.isArray(secretConfig.podsIncluded)) {
-      for (const podName of secretConfig.podsIncluded) {
+    // If undefined, assume all pods are included
+    const podsToInclude =
+      secretConfig.pods === null || secretConfig.pods === undefined
+        ? Object.keys(config.pods)
+        : secretConfig.pods;
+    if (Array.isArray(podsToInclude)) {
+      for (const podName of podsToInclude) {
         if (!config.pods[podName]) {
           throw new Error(
             `Secret ${secretName} exposed to pod ${podName}, which does not exist`
           );
         }
       }
-    } else if (typeof secretConfig.podsIncluded === "object") {
+    } else if (typeof podsToInclude === "object") {
       if (secretConfig.as) {
         throw new Error(
           `Secret ${secretName} cannot specify both 'as' and 'podsIncluded' with individual secret name mappings for each pod`
         );
       }
       // If an object is provided, treat each key as the pod name and each value as the environment variable name mapping
-      for (const podName of Object.keys(secretConfig.podsIncluded)) {
+      for (const podName of Object.keys(podsToInclude)) {
         if (!config.pods[podName]) {
           throw new Error(
             `Secret ${secretName} exposed to pod ${podName}, which does not exist`
