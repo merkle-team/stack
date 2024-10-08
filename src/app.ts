@@ -174,7 +174,7 @@ export class App {
           "apply",
           ...(this.options.yes ? ["--auto-approve"] : []),
           ...(this.options.skipLbs
-            ? ["--ignore-missing-stack-dependencie"]
+            ? ["--ignore-missing-stack-dependencies"]
             : []),
           ...stackIds,
         ],
