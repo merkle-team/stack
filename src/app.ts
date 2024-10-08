@@ -215,7 +215,6 @@ export class App {
       return 0;
     }
 
-    // TODO: Add per-ASG timeout
     const deployPromises = asgs.AutoScalingGroups.map(
       ({ AutoScalingGroupName, Tags }) => {
         const podName = Tags?.findLast((tag) => tag.Key === "pod")?.Value;
@@ -228,6 +227,7 @@ export class App {
 
         return this.waitForInstanceRefresh(
           AutoScalingGroupName as string,
+          podName,
           (this.config.pods[podName].deploy?.instanceRefreshTimeout || 600) *
             1000
         );
@@ -255,6 +255,7 @@ export class App {
 
   private async waitForInstanceRefresh(
     asgName: string,
+    podName: string,
     timeoutMillis: number
   ): Promise<void> {
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -307,33 +308,33 @@ export class App {
 
           const [refresh] = refreshes;
           console.log(
-            `${asgName}: ${refresh.Status} - ${
+            `${podName}: ${refresh.Status} - ${
               refresh.PercentageComplete || "?"
             }% - Instances remaining: ${refresh.InstancesToUpdate || "?"}. ${
               refresh.StatusReason || "..."
             }`
           );
           if (refresh.Status === "Successful") {
-            console.log(`${asgName} deploy completed successfully`);
+            console.log(`Pod ${podName} deploy completed successfully`);
             return;
           }
           if (refresh.Status === "RollbackSuccessful") {
-            const errMsg = `${asgName} deploy rolled back! ${refresh.StatusReason}`;
+            const errMsg = `Pod ${podName} deploy rolled back! ${refresh.StatusReason}`;
             console.error(errMsg);
             throw new Error(errMsg);
           }
           if (refresh.Status === "RollbackFailed") {
-            const errMsg = `${asgName} deploy failed, and the rollback also failed! ${refresh.StatusReason}`;
+            const errMsg = `Pod ${podName} deploy failed, and the rollback also failed! ${refresh.StatusReason}`;
             console.error(errMsg);
             throw new Error(errMsg);
           }
           if (refresh.Status === "Failed") {
-            const errMsg = `${asgName} deploy failed! ${refresh.StatusReason}`;
+            const errMsg = `Pod ${podName} deploy failed! ${refresh.StatusReason}`;
             console.error(errMsg);
             throw new Error(errMsg);
           }
           if (refresh.Status === "Cancelled") {
-            const errMsg = `${asgName} deploy canceled! Was another deploy initiated? ${refresh.StatusReason}`;
+            const errMsg = `Pod ${podName} deploy canceled! Was another deploy initiated? ${refresh.StatusReason}`;
             console.error(errMsg);
             throw new Error(errMsg);
           }
