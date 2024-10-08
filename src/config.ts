@@ -213,7 +213,7 @@ export function parseConfig(configPath: string) {
   )) {
     // If undefined, assume all pods are included
     const podsToInclude =
-      secretConfig.pods === null || secretConfig.pods === undefined
+      secretConfig?.pods === null || secretConfig?.pods === undefined
         ? Object.keys(config.pods)
         : secretConfig.pods;
     if (Array.isArray(podsToInclude)) {
@@ -225,7 +225,7 @@ export function parseConfig(configPath: string) {
         }
       }
     } else if (typeof podsToInclude === "object") {
-      if (secretConfig.as) {
+      if (secretConfig?.as) {
         throw new Error(
           `Secret ${secretName} cannot specify both 'as' and 'podsIncluded' with individual secret name mappings for each pod`
         );
