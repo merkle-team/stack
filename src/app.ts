@@ -998,20 +998,25 @@ export class App {
     for (const [secretName, secretOptions] of Object.entries(
       this.config.secrets || {}
     )) {
+      // If undefined, assume all pods are included
+      const podsToInclude =
+        secretOptions?.pods === null || secretOptions?.pods === undefined
+          ? Object.keys(this.config.pods)
+          : secretOptions.pods;
       if (
-        Array.isArray(secretOptions.podsIncluded) &&
-        secretOptions.podsIncluded?.length &&
-        secretOptions.podsIncluded?.includes(podName)
+        Array.isArray(secretOptions?.pods) &&
+        secretOptions.pods?.length &&
+        secretOptions.pods?.includes(podName)
       ) {
         // Map to the same name, or rename if "as" is provided
         allowedSecrets[secretName] = secretOptions.as
           ? secretOptions.as
           : secretName;
       } else if (
-        typeof secretOptions.podsIncluded === "object" &&
-        secretOptions.podsIncluded[podName] !== undefined
+        typeof secretOptions?.pods === "object" &&
+        secretOptions?.pods[podName] !== undefined
       ) {
-        allowedSecrets[secretName] = secretOptions.podsIncluded[podName]; // Map secret name
+        allowedSecrets[secretName] = secretOptions.pods[podName]; // Map secret name
       }
     }
     return allowedSecrets;
