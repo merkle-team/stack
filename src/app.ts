@@ -1004,13 +1004,13 @@ export class App {
           ? Object.keys(this.config.pods)
           : secretOptions.pods;
       if (
-        Array.isArray(secretOptions?.pods) &&
-        secretOptions.pods?.length &&
-        secretOptions.pods?.includes(podName)
+        Array.isArray(podsToInclude) &&
+        podsToInclude.length &&
+        podsToInclude.includes(podName)
       ) {
         // Map to the same name, or rename if "as" is provided
-        allowedSecrets[secretName] = secretOptions.as
-          ? secretOptions.as
+        allowedSecrets[secretName] = secretOptions?.as
+          ? secretOptions?.as
           : secretName;
       } else if (
         typeof secretOptions?.pods === "object" &&
