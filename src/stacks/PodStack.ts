@@ -290,6 +290,7 @@ export class PodStack extends TerraformStack {
           endpointOptions.target.deregistration?.action ===
           "force-terminate-connection",
         healthCheck: {
+          path: endpointOptions.target.healthCheck?.path ?? undefined,
           healthyThreshold:
             endpointOptions.target.healthCheck?.healthyThreshold,
           unhealthyThreshold:
