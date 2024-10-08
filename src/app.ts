@@ -90,7 +90,7 @@ export class App {
       );
     }
 
-    const stackIds = stacks.length
+    let stackIds = stacks.length
       ? this.normalizeStackIds(stacks)
       : this.getAllStackIds();
     const podNames = this.extractPodNames(stackIds);
@@ -110,6 +110,13 @@ export class App {
           stackIds.push(stackId);
         }
       }
+    }
+
+    // Remove any LB stacks if the user has specified to skip them
+    if (this.options.skipLbs) {
+      stackIds = stackIds.filter(
+        (stackId) => !stackId.startsWith(`${this.config.project}-lb-`)
+      );
     }
 
     console.info("Deploying stacks:", stackIds);
@@ -166,6 +173,9 @@ export class App {
           "cdktf",
           "apply",
           ...(this.options.yes ? ["--auto-approve"] : []),
+          ...(this.options.skipLbs
+            ? ["--ignore-missing-stack-dependencie"]
+            : []),
           ...stackIds,
         ],
         { env: { ...process.env, ...TF_ENVARS } }

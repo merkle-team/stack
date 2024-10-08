@@ -75,6 +75,11 @@ program
     "Skip the apply step (faster for container swap deploys)",
     false
   )
+  .option(
+    "--skip-lbs",
+    "Skip the apply step for load balancers (faster deploys assuming LBs already created)",
+    false
+  )
   .option("--apply-only", "Skip the deploy step after the apply", false)
   .action(async (pods, options) => {
     const app = new App(CLI_PATH, { ...program.opts(), ...options });
