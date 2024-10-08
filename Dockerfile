@@ -53,7 +53,7 @@ RUN bun run build
 # Copy production dependencies and source code into final image
 FROM base AS release
 
-RUN echo "update-notifier=false" > .npmrc # Don't show npm update msgs
+RUN npm config set update-notifier false
 
 COPY --from=install /temp/prod/node_modules node_modules
 COPY --from=prerelease /usr/src/app/build/. .

@@ -10,10 +10,6 @@ import { LoadBalancerStack } from "./stacks/LoadBalancerStack";
 import { PodStack } from "./stacks/PodStack";
 import { generateDeployScript } from "./util";
 import { execa } from "execa";
-import events from "events";
-
-// Avoid some annoying warnings
-events.defaultMaxListeners = 20;
 
 const MAX_RELEASES_TO_KEEP = 3;
 const TF_ENVARS = { TF_IN_AUTOMATION: "1" };
