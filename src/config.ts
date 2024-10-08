@@ -23,7 +23,7 @@ export const DeployConfigSchema = Type.Object({
   secrets: Type.Optional(
     Type.Record(
       Type.String(),
-      Type.Optional(
+      Type.Union([
         Type.Object({
           as: Type.Optional(Type.String()),
           pods: Type.Optional(
@@ -32,8 +32,9 @@ export const DeployConfigSchema = Type.Object({
               Type.Record(Type.String(), Type.String()),
             ])
           ),
-        })
-      )
+        }),
+        Type.Null(),
+      ])
     )
   ),
 
