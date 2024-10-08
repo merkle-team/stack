@@ -5,11 +5,16 @@ import { App as CdkApp } from "cdktf";
 import { EC2, Instance as EC2Instance } from "@aws-sdk/client-ec2";
 import { lb } from "@cdktf/provider-aws";
 import { sleep } from "./util";
-import { AutoScaling, LifecycleState } from "@aws-sdk/client-auto-scaling";
+import {
+  AutoScaling,
+  AutoScalingGroup,
+  LifecycleState,
+} from "@aws-sdk/client-auto-scaling";
 import { LoadBalancerStack } from "./stacks/LoadBalancerStack";
 import { PodStack } from "./stacks/PodStack";
 import { generateDeployScript } from "./util";
 import { execa } from "execa";
+import { dataAwsDevopsguruResourceCollectionTagsToTerraform } from "@cdktf/provider-aws/lib/data-aws-devopsguru-resource-collection";
 
 const MAX_RELEASES_TO_KEEP = 3;
 const TF_ENVARS = { TF_IN_AUTOMATION: "1" };
@@ -198,41 +203,44 @@ export class App {
     console.log(`Waiting for ASGs ${podNames.join(",")} to deploy...`);
     const asg = new AutoScaling({ region: this.config.region });
 
-    const asgs = await asg.describeAutoScalingGroups({
-      Filters: [
-        {
-          Name: "tag:project",
-          Values: [this.config.project],
-        },
-        {
-          Name: "tag:pod",
-          Values: podNames,
-        },
-      ],
-    });
-    if (!asgs.AutoScalingGroups?.length) {
-      console.warn("No ASGs found for project", this.config.project, podNames);
-      return 0;
+    // Fetch all ASGs for the pods we're deploying in chunks to avoid AWS limits
+    const asgs: AutoScalingGroup[] = [];
+    const maxPodsPerFetch = 5; // AWS limit
+    for (let offset = 0; offset < podNames.length; offset += maxPodsPerFetch) {
+      const podTagValues: string[] = podNames.slice(
+        offset,
+        Math.min(offset + maxPodsPerFetch, podNames.length)
+      );
+      const asgsResult = await asg.describeAutoScalingGroups({
+        Filters: [
+          {
+            Name: "tag:project",
+            Values: [this.config.project],
+          },
+          {
+            Name: "tag:pod",
+            Values: podTagValues,
+          },
+        ],
+      });
+      for (const group of asgsResult.AutoScalingGroups || []) {
+        asgs.push(group);
+      }
     }
 
-    const deployPromises = asgs.AutoScalingGroups.map(
-      ({ AutoScalingGroupName, Tags }) => {
-        const podName = Tags?.findLast((tag) => tag.Key === "pod")?.Value;
-        if (!podName) {
-          // Shouldn't happen, but check for type safety
-          throw new Error(
-            `ASG ${AutoScalingGroupName} does not have a pod tag`
-          );
-        }
-
-        return this.waitForInstanceRefresh(
-          AutoScalingGroupName as string,
-          podName,
-          (this.config.pods[podName].deploy?.instanceRefreshTimeout || 600) *
-            1000
-        );
+    const deployPromises = asgs.map(({ AutoScalingGroupName, Tags }) => {
+      const podName = Tags?.findLast((tag) => tag.Key === "pod")?.Value;
+      if (!podName) {
+        // Shouldn't happen, but check for type safety
+        throw new Error(`ASG ${AutoScalingGroupName} does not have a pod tag`);
       }
-    );
+
+      return this.waitForInstanceRefresh(
+        AutoScalingGroupName as string,
+        podName,
+        (this.config.pods[podName].deploy?.instanceRefreshTimeout || 600) * 1000
+      );
+    });
 
     const results = await Promise.allSettled(deployPromises);
     let deployFailed = false;
