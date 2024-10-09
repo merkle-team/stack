@@ -76,7 +76,7 @@ export class App {
     }
 
     if (failedStacks.length) {
-      console.log("Plan failures", failedStacks);
+      console.error("Stacks with plan failures:", failedStacks);
       return 1;
     }
 
