@@ -184,27 +184,29 @@ export class App {
     }
 
     // Only perform a swap if there are already running instances.
-    let swapStatus = 0;
     if (!this.options.applyOnly && alreadyRunningInstances.length) {
       // It's possible the above apply command removed instances, so need to check again
       const currentlyRunningInstances = await this.alreadyRunningInstances(
         podNames
       );
       if (currentlyRunningInstances.length) {
-        swapStatus = await this.swapContainers(
+        const swapStatus = await this.swapContainers(
           release,
           currentlyRunningInstances,
           podNames
         );
+        if (swapStatus !== 0) {
+          // No need to wait for instance refreshes since we know the deploy is a failure
+          // TODO: Cancel existing instance refreshes?
+          return swapStatus;
+        }
       }
     }
 
     // Since we may have triggered an instance refresh, wait until all ASGs are healthy
     // and at desired count, or consider the deploy a failure
     const waitExitStatus = await this.waitForInstanceRefreshes(podNames);
-
-    // If either the swap or the wait failed, return the failure status
-    return swapStatus || waitExitStatus;
+    return waitExitStatus;
   }
 
   private async waitForInstanceRefreshes(
