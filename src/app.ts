@@ -51,32 +51,32 @@ export class App {
 
     await this._synth();
 
-    const failed: unknown[] = [];
-    const results = await Promise.allSettled(
-      stackIds.map(
-        (stackId) =>
-          execa({ all: true })`bunx cdktf plan --skip-synth ${stackId}`
-      )
-    );
-    for (let i = 0; i < stackIds.length; i++) {
-      const result = results[i];
-      if (result.status === "rejected") {
-        failed.push(result.reason);
-      } else {
-        console.info(
-          "=========================================================================================="
-        );
-        console.info(`${stackIds[i]} plan output`);
-        console.info(
-          "↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓"
-        );
-        console.log(result.value.all);
-        console.log("exit status", result.value.exitCode);
+    const failedStacks: string[] = [];
+    // Need to run in serial since Terraform doesn't support multiple independent processes modifying
+    // the plugin cache directory, and CDKTF doesn't support planning multiple stacks in parallel. See:
+    // https://github.com/hashicorp/terraform-cdk/issues/2741
+    // https://github.com/hashicorp/terraform/issues/31964
+    // https://github.com/hashicorp/terraform-cdk/issues/3500#issuecomment-1951827605
+    for (const stackId of stackIds) {
+      console.info(
+        "=========================================================================================="
+      );
+      console.info(`${stackId} plan output`);
+      console.info(
+        "↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓"
+      );
+      const result = await execa({
+        stdout: "inherit",
+        stderr: "inherit",
+      })`bunx cdktf plan --skip-synth ${stackId}`;
+      console.log("exit status", result.exitCode);
+      if (result.exitCode !== 0) {
+        failedStacks.push(stackId);
       }
     }
 
-    if (failed.length) {
-      console.log("Plan failures", failed);
+    if (failedStacks.length) {
+      console.log("Plan failures", failedStacks);
       return 1;
     }
 
