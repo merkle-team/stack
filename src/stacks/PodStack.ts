@@ -25,6 +25,7 @@ import { Instance } from "@cdktf/provider-aws/lib/instance";
 import { stringToBase64 } from "uint8array-extras";
 import { TerraformStateBackend } from "../constructs/TerraformStateBackend";
 import * as zlib from "zlib";
+import { DataAwsAmi } from "@cdktf/provider-aws/lib/data-aws-ami";
 
 type PodStackOptions = {
   releaseId: string;
@@ -353,6 +354,16 @@ export class PodStack extends TerraformStack {
       }
     );
 
+    const ami = new DataAwsAmi(this, `${fullPodName}-ami`, {
+      mostRecent: true,
+      filter: [
+        {
+          name: "image-id",
+          values: [podOptions.image],
+        },
+      ],
+    });
+
     // Executed by cloud-init when the instance starts up
     // Use `sensitive` to hide massive base64 blob in diffs
     const userData = `#!/bin/bash
@@ -402,6 +413,17 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         httpProtocolIpv6: "disabled",
         instanceMetadataTags: "enabled",
       },
+
+      blockDeviceMappings: [
+        {
+          deviceName: ami.blockDeviceMappings[0].deviceName,
+          ebs: {
+            volumeSize: 100,
+            volumeType: "gp3",
+            deleteOnTermination: "true",
+          },
+        },
+      ],
 
       networkInterfaces: [
         {
