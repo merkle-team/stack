@@ -11,6 +11,12 @@ inputs:
   terraform_version:
     description: "Version of Terraform to use"
     required: true
+  aws_access_key_id:
+    description: "AWS access key ID"
+    required: true
+  aws_secret_access_key:
+    description: "AWS secret access key"
+    required: true
 
 runs:
   using: "composite"
@@ -32,3 +38,6 @@ runs:
     - name: Run `stack ${{ inputs.command }}`
       shell: bash
       run: ${{ runner.temp }}/stack ${{ inputs.command }}
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws_access_key_id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws_secret_access_key }}
