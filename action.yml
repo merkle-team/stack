@@ -23,8 +23,9 @@ runs:
       shell: bash
       run: |
         echo "Stack ${{ inputs.stack_version }} not yet installed. Installing..."
+        echo "https://github.com/warpcast/stack/releases/download/v${{ inputs.stack_version }}/stack-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | tr '[:upper:]' '[:lower:]')" > ${{ runner.temp }}/stack
         if [ ! -x ${{ runner.temp }}/stack ]; then
-          curl https://github.com/warpcast/stack/releases/download/v${{ inputs.stack_version }}/stack-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | tr '[:upper:]' '[:lower:]') > ${{ runner.temp }}/stack
+          curl "https://github.com/warpcast/stack/releases/download/v${{ inputs.stack_version }}/stack-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | tr '[:upper:]' '[:lower:]')" > ${{ runner.temp }}/stack
           chmod +x ${{ runner.temp }}/stack
         fi
 
