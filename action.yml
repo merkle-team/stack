@@ -21,12 +21,10 @@ runs:
 
     - name: Ensure stack is installed
       shell: bash
-      env:
-        DOWNLOAD_URL:
       run: |
         echo "Stack ${{ inputs.stack_version }} not yet installed. Installing https://github.com/warpcast/stack/releases/download/v${{ inputs.stack_version }}/stack-$(uname -s | tr '[:upper:]' '[:lower:]')-$(echo ${{ runner.arch }} | tr '[:upper:]' '[:lower:]')"
         if [ ! -x ${{ runner.temp }}/stack ]; then
-          curl "https://github.com/warpcast/stack/releases/download/v${{ inputs.stack_version }}/stack-$(uname -s | tr '[:upper:]' '[:lower:]')-$(echo ${{ runner.arch }} | tr '[:upper:]' '[:lower:]')" > ${{ runner.temp }}/stack
+          curl -L "https://github.com/warpcast/stack/releases/download/v${{ inputs.stack_version }}/stack-$(uname -s | tr '[:upper:]' '[:lower:]')-$(echo ${{ runner.arch }} | tr '[:upper:]' '[:lower:]')" > ${{ runner.temp }}/stack
           chmod +x ${{ runner.temp }}/stack
         fi
 
