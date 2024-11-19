@@ -22,7 +22,8 @@ runs:
     - name: Ensure stack is installed
       shell: bash
       run: |
-        if [ -x ${{ runner.temp }}/stack ]; then
+        echo "Stack ${{ inputs.stack_version }} not yet installed. Installing..."
+        if [ ! -x ${{ runner.temp }}/stack ]; then
           curl https://github.com/warpcast/stack/releases/download/v${{ inputs.stack_version }}/stack-linux-x64 > ${{ runner.temp }}/stack
           chmod +x ${{ runner.temp }}/stack
         fi
