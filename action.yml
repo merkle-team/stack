@@ -1,0 +1,32 @@
+name: "Execute Stack command"
+description: "Installs Stack (if not already installed) and runs a command"
+inputs:
+  command:
+    description: "Arguments to pass to stack command"
+    required: true
+  stack_version:
+    description: "Version of Stack to use"
+    required: false
+    default: "0.0.1"
+  terraform_version:
+    description: "Version of Terraform to use"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ inputs.terraform_version }}
+
+    - name: Ensure stack is installed
+      shell: bash
+      run: |
+        if [ -x ${{ runner.temp }}/stack ]; then
+          curl https://github.com/warpcast/stack/releases/download/v${{ inputs.stack_version }}/stack-linux-x64 > ${{ runner.temp }}/stack
+          chmod +x ${{ runner.temp }}/stack
+        fi
+
+    - name: Run `stack ${{ inputs.command }}`
+      shell: bash
+      run: ${{ runner.temp }}/stack ${{ inputs.command }}
