@@ -1,0 +1,43 @@
+{
+  "name": "stack",
+  "version": "0.0.1",
+  "license": "None",
+  "private": true,
+  "bin": {
+    "stack": "build/bin/stack"
+  },
+  "scripts": {
+    "build": "export HUSKY=0; mkdir -p build && bun install --frozen-lockfile && bun build --target=bun --minify --sourcemap=linked --outdir build ./src/cli.ts && rm -rf .*.bun-build",
+    "lint": "bunx tsc --noEmit",
+    "prepare": "bunx husky install",
+    "fmt": "bunx prettier --write ."
+  },
+  "dependencies": {
+    "@aws-sdk/client-auto-scaling": "^3.521.0",
+    "@aws-sdk/client-ec2": "^3.521.0",
+    "@aws-sdk/client-elastic-load-balancing-v2": "^3.521.0",
+    "@aws-sdk/client-secrets-manager": "^3.529.1",
+    "@cdktf/provider-aws": "^19.41.0",
+    "@cdktf/provider-null": "^10.0.1",
+    "@commander-js/extra-typings": "^12.0.0",
+    "@sinclair/typebox": "^0.32.15",
+    "cdktf-cli": "^0.20.10",
+    "commander": "^12.0.0",
+    "constructs": "^10.3.0",
+    "execa": "^9.4.0",
+    "inquirer": "^9.2.16",
+    "uint8array-extras": "^1.4.0",
+    "yaml": "^2.4.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.9",
+    "@types/inquirer": "^9.0.7",
+    "cdktf": "^0.20.10",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
+    "typescript": "^5.6.2"
+  },
+  "lint-staged": {
+    "*.ts": "bun run lint-staged"
+  }
+}

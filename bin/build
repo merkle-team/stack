@@ -1,0 +1,16 @@
+#!/bin/sh
+
+if [ -z "$1" ]; then
+  echo "Must specify platform (e.g. linux-arm64)"
+  exit 1
+else
+  platform="$1"
+fi
+
+set -eu
+
+export HUSKY=0
+mkdir -p build
+
+bun install --frozen-lockfile
+bun build --target=bun-$platform --minify --sourcemap=linked --compile --outfile "build/stack-$platform" ./src/cli.ts

@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "noImplicitAny": false,
+    "noFallthroughCasesInSwitch": true,
+    "strict": true,
+    "noErrorTruncation": true,
+    "skipLibCheck": true
+  }
+}
