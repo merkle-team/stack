@@ -1084,11 +1084,6 @@ export class App {
         allowedSecrets[secretName] = secretOptions?.as
           ? secretOptions?.as
           : secretName;
-      } else if (
-        typeof secretOptions?.pods === "object" &&
-        secretOptions?.pods[podName] !== undefined
-      ) {
-        allowedSecrets[secretName] = secretOptions.pods[podName]; // Map secret name
       }
     }
     return allowedSecrets;
