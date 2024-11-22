@@ -17,20 +17,6 @@ To avoid having to install Terraform + the Terraform CDK, use the Docker image d
 
 No installation required. See instructions below for how to invoke via Docker.
 
-### Homebrew (macOS) or Linuxbrew (Linux)
-
-```
-brew install terraform
-brew install cdktf
-brew install warpcast/formulae/stack
-```
-
-To uninstall:
-
-```
-brew uninstall warpcast/formulae/stack
-```
-
 ### macOS or Linux
 
 ```
