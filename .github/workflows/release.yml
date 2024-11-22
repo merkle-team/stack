@@ -20,3 +20,18 @@ jobs:
         env:
           DEPOT_TOKEN: ${{ secrets.DEPOT_TOKEN }}
           DEPOT_PROJECT_ID: ${{ secrets.DEPOT_PROJECT_ID }}
+
+  publish-executable:
+    needs: [publish-docker-images]
+    steps:
+      - name: Append version tag to executable
+        run: |
+          mkdir -p ./build
+          touch ./build/stack
+          chmod +x ./build/stack
+          echo "${{ github.sha }}" | cat bin/exec-stack-via-docker.sh - > ./build/stack
+        shell: bash
+      - uses: softprops/action-gh-release@v2
+        generate_release_notes: true
+        make_latest: true
+        files: build/stack
