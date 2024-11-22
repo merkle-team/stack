@@ -8,8 +8,7 @@
 # You must `docker login ...` first so that we have the necessary permissions to
 # push the image layers + tags to Docker Hub.
 
-#STACK_VERSION=$(node -e "console.log(require('./package.json').version);")
-STACK_VERSION=$(git rev-parse HEAD)
+STACK_VERSION=${STACK_VERSION:-$(git rev-parse HEAD)}
 
 echo "Publishing Stack $STACK_VERSION"
 

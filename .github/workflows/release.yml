@@ -17,7 +17,8 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       - uses: depot/setup-action@v1
-      - run: ./bin/publish-image.sh
+      - run: |
+        env STACK_VERSION=${{ github.sha }} ./bin/publish-image.sh
         shell: bash
         env:
           DEPOT_TOKEN: ${{ secrets.DEPOT_TOKEN }}
@@ -30,6 +31,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Should already be built, we just want to publish the specific version tag
+      - run: |
+        env STACK_VERSION=${{ github.ref_name }} ./bin/publish-image.sh
+        shell: bash
+        env:
+          DEPOT_TOKEN: ${{ secrets.DEPOT_TOKEN }}
+          DEPOT_PROJECT_ID: ${{ secrets.DEPOT_PROJECT_ID }}
       - name: Append version tag to executable
         shell: bash
         run: |
