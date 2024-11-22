@@ -9,17 +9,17 @@
 
 set -euo pipefail
 
-if ! which curl; then
+if ! which curl > /dev/null; then
   echo "curl not found in PATH"
   exit 1
 fi
 
-if ! which jq; then
+if ! which jq > /dev/null; then
   echo "jq not found in PATH"
   exit 1
 fi
 
-if ! which sudo; then
+if ! which sudo > /dev/null; then
   echo "sudo not found in PATH"
   exit 1
 fi
@@ -43,7 +43,7 @@ if [ ! -d $(dirname $location) ]; then
   fi
 fi
 
-if ! touch $location; then
+if ! touch $location > /dev/null; then
   auth-sudo
   sudo touch $location
   sudo chown $(id -u):$(id -g) $location
