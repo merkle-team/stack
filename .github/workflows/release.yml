@@ -25,6 +25,7 @@ jobs:
     needs: [publish-docker-images]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Append version tag to executable
         run: |
           mkdir -p ./build
