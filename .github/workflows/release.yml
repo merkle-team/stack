@@ -17,8 +17,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       - uses: depot/setup-action@v1
-      - run: |
-        env STACK_VERSION=${{ github.sha }} ./bin/publish-image.sh
+      - run: env STACK_VERSION=${{ github.sha }} ./bin/publish-image.sh
         shell: bash
         env:
           DEPOT_TOKEN: ${{ secrets.DEPOT_TOKEN }}
@@ -37,8 +36,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       - uses: depot/setup-action@v1
-      - run: |
-        env STACK_VERSION=${{ github.ref_name }} ./bin/publish-image.sh
+      - run: env STACK_VERSION=${{ github.ref_name }} ./bin/publish-image.sh
         shell: bash
         env:
           DEPOT_TOKEN: ${{ secrets.DEPOT_TOKEN }}
