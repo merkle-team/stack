@@ -455,19 +455,24 @@ export class App {
                     );
 
                     // Record the current host key (workaround for SSH client jump host bug)
-                    await $`ssh -T -F /dev/null -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${bastionUser}@${bastionHost} true`;
+                    if (bastionUser && bastionHost) {
+                      await $`ssh -T -F /dev/null -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${bastionUser}@${bastionHost} true`;
+                    }
 
+                    const scriptInput = new Response(`
+                      ${generateDeployScript(
+                        this.config.project,
+                        podName,
+                        podOptions,
+                        releaseId,
+                        composeContents,
+                        this.allowedPodSecrets(podName)
+                      )}
+                    `);
                     const connectResult =
-                      await $`ssh -T -F /dev/null -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${new Response(`
-                        ${generateDeployScript(
-                          this.config.project,
-                          podName,
-                          podOptions,
-                          releaseId,
-                          composeContents,
-                          this.allowedPodSecrets(podName)
-                        )}
-                      `)}`;
+                      bastionUser && bastionHost
+                        ? await $`ssh -T -F /dev/null -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${scriptInput}`
+                        : await $`ssh -T -F /dev/null -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${scriptInput}`;
                     if (connectResult.exitCode !== 0) {
                       console.error(
                         "STDOUT",
@@ -678,10 +683,8 @@ export class App {
                     `About to swap pod ${podName} containers on ${sshUser}@${ip}`
                   );
 
-                  // Swap the containers
-                  const connectResult =
-                    await $`ssh -T -F /dev/null -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${new Response(
-                      `# Execute these commands on the remote server in a Bash shell
+                  const scriptInput = new Response(
+                    `# Execute these commands on the remote server in a Bash shell
     set -e -o pipefail
 
     # Stop the current release if there is one
@@ -698,7 +701,7 @@ export class App {
     fi
 
     new_release_dir="/home/${sshUser}/releases/${releaseId}"
-    cd "$new_release_dir" 
+    cd "$new_release_dir"
 
     # Update "current" location to point to the new release
     echo "$new_release_dir" > /home/${sshUser}/releases/current
@@ -712,13 +715,18 @@ export class App {
 
     # Delete old images + containers
     docker system prune --force
-    
-    # Clean up old releases 
+
+    # Clean up old releases
     echo "Deleting old release directories for pod ${podName} on ${instanceId} ${ip}"
     cd /home/${sshUser}
-    ls -I current releases | sort | head -n -${MAX_RELEASES_TO_KEEP} | xargs --no-run-if-empty -I{} rm -rf releases/{}
-            `
-                    )}`;
+    ls -I current releases | sort | head -n -${MAX_RELEASES_TO_KEEP} | xargs --no-run-if-empty -I{} rm -rf releases/{}`
+                  );
+
+                  // Swap the containers
+                  const connectResult =
+                    bastionUser && bastionHost
+                      ? await $`ssh -T -F /dev/null -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${scriptInput}`
+                      : await $`ssh -T -F /dev/null -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${scriptInput}`;
                   if (connectResult.exitCode !== 0) {
                     console.error(
                       "STDOUT",
