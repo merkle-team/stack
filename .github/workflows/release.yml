@@ -32,6 +32,7 @@ jobs:
           echo "${{ github.sha }}" | cat bin/exec-stack-via-docker.sh - > ./build/stack
         shell: bash
       - uses: softprops/action-gh-release@v2
-        generate_release_notes: true
-        make_latest: true
-        files: build/stack
+        with:
+          generate_release_notes: true
+          make_latest: true
+          files: build/stack
