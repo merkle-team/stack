@@ -105,7 +105,30 @@ secrets:
 
 ## Installation
 
-Since this is in active development, you can only install this from source for now.
+- **OS**: macOS or Linux
+- **Architecture**: x86_64 (a.k.a. Intel) or arm64 (a.k.a. Apple Silicon)
+
+### Homebrew (macOS) or Linuxbrew (Linux)
+
+```
+brew install warpcast/formulae/stack
+```
+
+To uninstall:
+```
+brew uninstall warpcast/formulae/stack
+```
+
+### macOS or Linux
+
+```
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/warpcast/stack/main/HEAD/install.sh)"
+```
+
+To uninstall:
+```
+sudo rm -f /usr/local/bin/stack
+```
 
 ### From source
 
@@ -116,4 +139,4 @@ bin/build {linux,darwin}-{x,arm}64
 ```
 
 This will create the `stack-*` executable in the `build` for the desired platform, which is self-contained.
-You can add this to your PATH or install however you please.
+You can add this to your PATH or execute directly however you please.
