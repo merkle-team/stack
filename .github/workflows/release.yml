@@ -23,6 +23,7 @@ jobs:
 
   publish-executable:
     needs: [publish-docker-images]
+    runs-on: ubuntu-latest
     steps:
       - name: Append version tag to executable
         run: |
