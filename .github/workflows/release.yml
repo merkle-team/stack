@@ -3,6 +3,8 @@ name: Release
 on:
   push:
     branches: [main]
+    tags:
+      - "v*.*.*"
 
 jobs:
   publish-docker-images:
@@ -23,16 +25,17 @@ jobs:
 
   publish-executable:
     needs: [publish-docker-images]
+    if: ${{ github.ref_name != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Append version tag to executable
+        shell: bash
         run: |
           mkdir -p ./build
           touch ./build/stack
           chmod +x ./build/stack
-          echo "${{ github.sha }}" | cat bin/exec-stack-via-docker.sh - > ./build/stack
-        shell: bash
+          echo "${{ github.ref_name }}" | cat bin/exec-stack-via-docker.sh - > ./build/stack
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
