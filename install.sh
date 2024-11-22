@@ -5,7 +5,7 @@
 #
 # You can run it anywhere by executing:
 #
-# /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/warpcast/stack/main/HEAD/install.sh)"
+# /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/warpcast/stack/refs/heads/main/install.sh)"
 
 set -euo pipefail
 
