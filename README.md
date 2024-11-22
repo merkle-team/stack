@@ -29,17 +29,6 @@ To uninstall:
 sudo rm -f /usr/local/bin/stack
 ```
 
-### From source
-
-Check out this repository and run:
-
-```bash
-bin/build {linux,darwin}-{x,arm}64
-```
-
-This will create the `stack-*` executable in the `build` for the desired platform, which is self-contained.
-You can add this to your PATH or execute directly however you please.
-
 ## Getting started
 
 Create a `deploy.yml` file in your repository.
