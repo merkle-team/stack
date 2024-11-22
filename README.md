@@ -4,33 +4,37 @@ Tool for deploying services on AWS EC2 instances.
 
 ## Installation
 
+Stack is distributed as a Docker image.
+
 ### Requirements
-
-- **OS**: macOS or Linux
+- Docker
 - **Architecture**: x86_64 (a.k.a. Intel) or arm64 (a.k.a. Apple Silicon)
-- **Terraform** 1.9.x or newer
-- **Terraform CDK** 0.20.8 or newer
 
-To avoid having to install Terraform + the Terraform CDK, use the Docker image directly.
+To avoid having to install Terraform + the Terraform CDK, a Docker image is provided along with a helper script you can install to make running Stack easier.
 
-### Docker
-
-No installation required. See instructions below for how to invoke via Docker.
-
-### macOS or Linux
+### Download
+Install a helper script in `/usr/local/bin/stack` which makes it so you can run Stack like a normal executable without having to provide all the `docker run` flags explicitly.
 
 ```
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/warpcast/stack/refs/heads/main/install.sh)"
 ```
 
-To uninstall:
+Assuming `/usr/local/bin` is in your `PATH`, you can now run:
+```
+stack --help
+```
+...to download the image and confirm everything is working correctly.
 
+### Upgrading
+Just follow the [**Download**](#Download) instructions again to upgrade.
+
+### Uninstall
+Installation just installs a shim, which can be removed with:
 ```
 sudo rm -f /usr/local/bin/stack
 ```
 
 ## Getting started
-
 Create a `deploy.yml` file in your repository.
 
 ```yaml

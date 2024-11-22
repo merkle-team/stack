@@ -54,10 +54,9 @@ if ! chmod +x $location; then
   sudo chmod +x $location
 fi
 
-download_url=$(curl -s https://api.github.com/repos/warpcast/stack/releases/latest | jq -r ".assets[] | select(.name  == (\"stack-$(uname -o)-$(uname -m)\" | ascii_downcase)) | .browser_download_url")
+download_url=$(curl -s https://api.github.com/repos/warpcast/stack/releases/latest | jq -r ".assets[] | select(.name  == \"stack\") | .browser_download_url")
 if [ -z "$download_url" ]; then
-  echo "Could not find download URL for stack-`uname -o`-`uname -m`"
-  echo "It's possible your platform isn't supported"
+  echo "Could not find download URL for latest version of Stack"
   exit 1
 fi
 
