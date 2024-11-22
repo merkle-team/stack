@@ -1,19 +1,32 @@
 # `stack`
 
-Tool for deploying services on EC2 instances in our infrastructure.
+Tool for deploying services on AWS EC2 instances.
 
 ## Installation
 
+### Requirements
+
 - **OS**: macOS or Linux
 - **Architecture**: x86_64 (a.k.a. Intel) or arm64 (a.k.a. Apple Silicon)
+- **Terraform** 1.9.x or newer
+- **Terraform CDK** 0.20.8 or newer
+
+To avoid having to install Terraform + the Terraform CDK, use the Docker image directly.
+
+### Docker
+
+No installation required. See instructions below for how to invoke via Docker.
 
 ### Homebrew (macOS) or Linuxbrew (Linux)
 
 ```
+brew install terraform
+brew install cdktf
 brew install warpcast/formulae/stack
 ```
 
 To uninstall:
+
 ```
 brew uninstall warpcast/formulae/stack
 ```
@@ -25,6 +38,7 @@ brew uninstall warpcast/formulae/stack
 ```
 
 To uninstall:
+
 ```
 sudo rm -f /usr/local/bin/stack
 ```
