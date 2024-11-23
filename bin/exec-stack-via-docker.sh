@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Executes Stack via Docker.
 #
@@ -33,6 +33,7 @@ fi
 if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
   # No AWS envars specified, so assume we'll get it via Instance MetaData Service
   exec docker run --rm -it \
+    --env-file <(env) \
     -v$(pwd):/usr/src/app/workspace \
     -v $SSH_AUTH_SOCK:/ssh-agent \
     -e SSH_AUTH_SOCK=/ssh-agent \
@@ -40,6 +41,7 @@ if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
 else
   # Otherwise explicitly forward AWS auth envars
   exec docker run --rm -it \
+    --env-file <(env) \
     -v$(pwd):/usr/src/app/workspace \
     -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
     -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
