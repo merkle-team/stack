@@ -30,9 +30,15 @@ if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
   AWS_SECRET_ACCESS_KEY=$(cat ~/.aws/credentials | sed -n 's/.*aws_secret_access_key\s*=\s*\([a-zA-Z0-9+-_]*\).*/\1/p')
 fi
 
+if [ -t 0 ]; then
+  interactive_flags="-it"
+else
+  interactive_flags=""
+fi
+
 if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
   # No AWS envars specified, so assume we'll get it via Instance MetaData Service
-  exec docker run --rm -it \
+  exec docker run --rm $interactive_flags \
     --env-file <(env | grep -v -E '^PATH=' | grep -v -E '^SHELL=') \
     -v$(pwd):/usr/src/app/workspace \
     -v $SSH_AUTH_SOCK:/ssh-agent \
@@ -40,7 +46,7 @@ if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
     warpcast/stack:$STACK_VERSION "$@"
 else
   # Otherwise explicitly forward AWS auth envars
-  exec docker run --rm -it \
+  exec docker run --rm $interactive_flags \
     --env-file <(env | grep -v -E '^PATH=' | grep -v -E '^SHELL=') \
     -v$(pwd):/usr/src/app/workspace \
     -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
