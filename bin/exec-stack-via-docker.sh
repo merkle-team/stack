@@ -39,19 +39,21 @@ fi
 if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
   # No AWS envars specified, so assume we'll get it via Instance MetaData Service
   exec docker run --rm $interactive_flags \
-    --env-file <(env | grep -v -E '^PATH=' | grep -v -E '^SHELL=') \
+    --env-file <(env | grep -E '^STACK_') \
     -v$(pwd):/usr/src/app/workspace \
-    -v $SSH_AUTH_SOCK:/ssh-agent \
+    -e "CI=$CI" \
+    -v "${SSH_AUTH_SOCK:-/ssh-agent}:/ssh-agent" \
     -e SSH_AUTH_SOCK=/ssh-agent \
     warpcast/stack:$STACK_VERSION "$@"
 else
   # Otherwise explicitly forward AWS auth envars
   exec docker run --rm $interactive_flags \
-    --env-file <(env | grep -v -E '^PATH=' | grep -v -E '^SHELL=') \
+    --env-file <(env | grep -E '^STACK_') \
     -v$(pwd):/usr/src/app/workspace \
+    -e "CI=$CI" \
     -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
     -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
-    -v $SSH_AUTH_SOCK:/ssh-agent \
+    -v "${SSH_AUTH_SOCK:-/ssh-agent}:/ssh-agent" \
     -e SSH_AUTH_SOCK=/ssh-agent \
     warpcast/stack:$STACK_VERSION "$@"
 fi
