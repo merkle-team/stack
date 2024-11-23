@@ -26,8 +26,8 @@ fi
 
 # If no envars, try to load credentials from config file
 if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-  AWS_ACCESS_KEY_ID=$(cat ~/.aws/credentials | sed -n 's/.*aws_access_key_id\s*=\s*\([a-zA-Z0-9+-_]*\).*/\1/p')
-  AWS_SECRET_ACCESS_KEY=$(cat ~/.aws/credentials | sed -n 's/.*aws_secret_access_key\s*=\s*\([a-zA-Z0-9+-_]*\).*/\1/p')
+  AWS_ACCESS_KEY_ID=$(sed -n 's/.*aws_access_key_id\s*=\s*\([a-zA-Z0-9+-_]*\).*/\1/p' ~/.aws/credentials 2>/dev/null)
+  AWS_SECRET_ACCESS_KEY=$(sed -n 's/.*aws_secret_access_key\s*=\s*\([a-zA-Z0-9+-_]*\).*/\1/p' ~/.aws/credentials 2>/dev/null)
 fi
 
 if [ -t 0 ]; then
