@@ -22,12 +22,12 @@ program.option(
     if (workdir) {
       process.chdir(workdir);
     }
-  }
+  },
 );
 program.option(
   "-c, --config <path>",
   "Path to the configuration file",
-  "deploy.yml"
+  "deploy.yml",
 );
 
 program
@@ -36,12 +36,12 @@ program
   .argument(
     "[stacks...]",
     "Stack(s) to synthesize. If unspecified, all stacks are synthesized.",
-    ["*"]
+    ["*"],
   )
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    generateReleaseId()
+    generateReleaseId(),
   )
   .action(async (stacks, options) => {
     const app = new App(CLI_PATH, { ...program.opts(), ...options });
@@ -54,7 +54,7 @@ program
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    generateReleaseId()
+    generateReleaseId(),
   )
   .action(async (options) => {
     const app = new App(CLI_PATH, { ...program.opts(), ...options });
@@ -67,17 +67,17 @@ program
   .argument(
     "[pods...]",
     "Pod(s) to deploy. If unspecified, all pods are deployed.",
-    []
+    [],
   )
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    generateReleaseId()
+    generateReleaseId(),
   )
   .option(
     "--skip-apply",
     "Skip the apply step (faster for container swap deploys)",
-    false
+    false,
   )
   .option("--apply-only", "Skip the deploy step after the apply", false)
   .action(async (pods, options) => {
@@ -91,12 +91,12 @@ program
   .argument(
     "[stacks...]",
     "Stack to plan. If unspecified, all stacks are planned.",
-    []
+    [],
   )
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    generateReleaseId()
+    generateReleaseId(),
   )
   .action(async (stacks, options) => {
     const app = new App(CLI_PATH, { ...program.opts(), ...options });
@@ -109,7 +109,7 @@ program
   .argument(
     "[stacks...]",
     "Stack to plan. If unspecified, all stacks are planned.",
-    []
+    [],
   )
   .action(async (stacks) => {
     const app = new App(CLI_PATH, program.opts());
@@ -122,7 +122,7 @@ program
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    generateReleaseId()
+    generateReleaseId(),
   )
   .action(async (options) => {
     const app = new App(CLI_PATH, { ...program.opts(), ...options });

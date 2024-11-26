@@ -11,7 +11,7 @@ export function generateDeployScript(
   podOptions: DeployConfig["pods"][string],
   releaseId: string,
   composeContents: string,
-  secretNameMappings: Record<string, string>
+  secretNameMappings: Record<string, string>,
 ) {
   const sshUser = podOptions.sshUser;
 
@@ -56,20 +56,20 @@ if [ ! -d /home/${sshUser}/releases/${releaseId} ]; then
   # Write current values of environment variables current set for this pod
   echo "# Pod environment variables (can change with each deploy)" > .pod.env
   echo "${stringToBase64(
-    generateEnvVarsForPod(podOptions)
+    generateEnvVarsForPod(podOptions),
   )}" | base64 -d >> .pod.env
   echo "" >> .pod.env
 
   # Fetch secrets in batches and write to .pod.env
   ${Array.from(
     { length: Math.ceil(secretNames.length / secretBatchSize) },
-    (_, i) => secretNames.slice(i * secretBatchSize, (i + 1) * secretBatchSize)
+    (_, i) => secretNames.slice(i * secretBatchSize, (i + 1) * secretBatchSize),
   )
     .map(
       (batch) =>
         `aws secretsmanager batch-get-secret-value --secret-id-list ${batch.join(
-          " "
-        )} --output json | jq -r '.SecretValues[] | .Name + "=" + .SecretString' >> .pod.env`
+          " ",
+        )} --output json | jq -r '.SecretValues[] | .Name + "=" + .SecretString' >> .pod.env`,
     )
     .join("\n")}
   chmod 400 .pod.env
@@ -79,7 +79,7 @@ if [ ! -d /home/${sshUser}/releases/${releaseId} ]; then
     .filter(([secretName, mappedName]) => secretName !== mappedName)
     .map(
       ([secretName, mappedName]) =>
-        `sed -i.bak "s/^${secretName}=/${mappedName}=/" .pod.env`
+        `sed -i.bak "s/^${secretName}=/${mappedName}=/" .pod.env`,
     )
     .join("\n")}
   rm -f .pod.env.bak
@@ -120,7 +120,7 @@ function generateEnvVarsForPod(podOptions: DeployConfig["pods"][string]) {
       .map(([envName, envValue]) =>
         envValue === undefined || envValue === null
           ? `${envName}=${process.env[envName]}`
-          : `${envName}=${envValue}`
+          : `${envName}=${envValue}`,
       )
       .join("\n");
     return podEnvVars;
@@ -132,7 +132,7 @@ function generateEnvVarsForPod(podOptions: DeployConfig["pods"][string]) {
 export async function inBatchesOf<T>(
   items: T[],
   batchSize: number,
-  fn: (batch: T[]) => unknown
+  fn: (batch: T[]) => unknown,
 ) {
   let offset = 0;
   while (offset < items.length) {

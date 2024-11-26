@@ -79,14 +79,14 @@ export class PodStack extends TerraformStack {
 
     const lbs: Record<string, Lb> = {};
     for (const [lbName, lbOptions] of objectEntries(
-      podOptions.loadBalancers || {}
+      podOptions.loadBalancers || {},
     )) {
       if (
         lbOptions.idleTimeout !== undefined &&
         lbOptions.type !== "application"
       ) {
         throw new Error(
-          `Load balancer ${lbName} for pod ${fullPodName} has an idle-timeout specified, but is not an application load balancer`
+          `Load balancer ${lbName} for pod ${fullPodName} has an idle-timeout specified, but is not an application load balancer`,
         );
       }
       const uniqueLbName = `${options.project}-pod-${options.shortName}-${lbName}`;
@@ -105,7 +105,7 @@ export class PodStack extends TerraformStack {
           securityGroupId: lbSg.securityGroupId,
           ipProtocol: "-1",
           cidrIpv4: "0.0.0.0/0",
-        }
+        },
       );
       new VpcSecurityGroupIngressRule(
         this,
@@ -114,7 +114,7 @@ export class PodStack extends TerraformStack {
           securityGroupId: lbSg.securityGroupId,
           ipProtocol: "-1",
           cidrIpv6: "::/0",
-        }
+        },
       );
 
       // Allow egress to anywhere
@@ -125,7 +125,7 @@ export class PodStack extends TerraformStack {
           securityGroupId: lbSg.securityGroupId,
           ipProtocol: "-1",
           cidrIpv4: "0.0.0.0/0",
-        }
+        },
       );
       new VpcSecurityGroupEgressRule(
         this,
@@ -134,7 +134,7 @@ export class PodStack extends TerraformStack {
           securityGroupId: lbSg.securityGroupId,
           ipProtocol: "-1",
           cidrIpv6: "::/0",
-        }
+        },
       );
 
       const lb = new Lb(this, `pod-${fullPodName}-lb-${lbName}`, {
@@ -185,7 +185,7 @@ export class PodStack extends TerraformStack {
               ],
             },
           ],
-        }
+        },
       ).json,
     });
 
@@ -262,7 +262,7 @@ export class PodStack extends TerraformStack {
                 resources: ["*"], // Above conditions limit this to instance's own tags
               },
             ],
-          }
+          },
         ).json,
       }).arn,
     });
@@ -276,7 +276,7 @@ export class PodStack extends TerraformStack {
         {
           role: podRole.name,
           policyArn: rolePolicyArn,
-        }
+        },
       );
     }
 
@@ -329,13 +329,13 @@ export class PodStack extends TerraformStack {
 
     const tgs: Record<string, LbTargetGroup> = {};
     for (const [endpointName, endpointOptions] of Object.entries(
-      podOptions.endpoints || {}
+      podOptions.endpoints || {},
     )) {
       for (const ipProtocol of ["tcp", "udp"]) {
         if (
           ipProtocol === "tcp" &&
           !["HTTP", "HTTPS", "TCP", "TCP_UDP", "TLS"].includes(
-            endpointOptions.target.protocol
+            endpointOptions.target.protocol,
           )
         ) {
           continue;
@@ -359,7 +359,7 @@ export class PodStack extends TerraformStack {
               Name: `${fullPodName}-ingress-${endpointName}-ipv4-${ipProtocol}`,
               pod: options.shortName,
             },
-          }
+          },
         );
         new VpcSecurityGroupIngressRule(
           this,
@@ -374,7 +374,7 @@ export class PodStack extends TerraformStack {
               Name: `${fullPodName}-ingress-${endpointName}-ipv6-${ipProtocol}`,
               pod: options.shortName,
             },
-          }
+          },
         );
       }
 
@@ -419,7 +419,7 @@ export class PodStack extends TerraformStack {
           statuses: ["ISSUED"],
           types: ["AMAZON_ISSUED"],
           mostRecent: true,
-        }
+        },
       );
 
       new LbListener(this, `${fullPodName}-${endpointName}-listener`, {
@@ -452,7 +452,7 @@ export class PodStack extends TerraformStack {
         tags: {
           pod: options.shortName,
         },
-      }
+      },
     );
 
     const ami = new DataAwsAmi(this, `${fullPodName}-ami`, {
@@ -475,7 +475,7 @@ echo "${zlib
       .gzipSync(
         podOptions.initScript
           ? readFileSync(podOptions.initScript).toString()
-          : "#/bin/bash\n# No script specified in this deploy configuration's initScript\n"
+          : "#/bin/bash\n# No script specified in this deploy configuration's initScript\n",
       )
       .toString("base64")}" | base64 -d | gunzip > before-init.sh
 chmod +x before-init.sh
@@ -489,8 +489,8 @@ echo "${zlib
           options.podOptions,
           releaseId,
           composeContents,
-          options.secretMappings
-        )
+          options.secretMappings,
+        ),
       )
       .toString("base64")}" | base64 -d | gunzip > init.sh
 chmod +x init.sh
@@ -586,7 +586,6 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
       // Can't use ASG with a pre-specified ENI since ASGs assign ENIs directly
       // so we create the instance directly
       const instance = new Instance(this, `${fullPodName}-singleton`, {
-        subnetId: podOptions.singleton.subnet,
         launchTemplate: {
           name: lt.name,
         },
@@ -604,7 +603,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
           {
             networkInterfaceId: podOptions.singleton.networkInterfaceId,
             securityGroupId: podSg.securityGroupId,
-          }
+          },
         );
       } else {
         instance.securityGroups = [podSg.securityGroupId];
