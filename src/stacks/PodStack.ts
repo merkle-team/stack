@@ -547,11 +547,11 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
           ipv6AddressCount: podOptions.singleton?.networkInterfaceId
             ? undefined
             : 1,
-          securityGroups: podOptions.singleton?.networkInterfaceId
-            ? undefined
-            : [podSg.securityGroupId],
         },
       ],
+      vpcSecurityGroupIds: podOptions.singleton?.networkInterfaceId
+        ? undefined
+        : [podSg.securityGroupId],
 
       // Enable DNS resolution for the instance hostname (e.g. instance-id.ec2.internal)
       privateDnsNameOptions: {
