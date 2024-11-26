@@ -7,12 +7,14 @@ Tool for deploying services on AWS EC2 instances.
 Stack is distributed as a Docker image.
 
 ### Requirements
+
 - Docker
 - **Architecture**: x86_64 (a.k.a. Intel) or arm64 (a.k.a. Apple Silicon)
 
 To avoid having to install Terraform + the Terraform CDK, a Docker image is provided along with a helper script you can install to make running Stack easier.
 
 ### Download
+
 Install a helper script in `/usr/local/bin/stack` which makes it so you can run Stack like a normal executable without having to provide all the `docker run` flags explicitly.
 
 ```
@@ -20,21 +22,27 @@ Install a helper script in `/usr/local/bin/stack` which makes it so you can run 
 ```
 
 Assuming `/usr/local/bin` is in your `PATH`, you can now run:
+
 ```
 stack --help
 ```
+
 ...to download the image and confirm everything is working correctly.
 
 ### Upgrading
+
 Just follow the [**Download**](#Download) instructions again to upgrade.
 
 ### Uninstall
+
 Installation just installs a shim, which can be removed with:
+
 ```
 sudo rm -f /usr/local/bin/stack
 ```
 
 ## Getting started
+
 Create a `deploy.yml` file in your repository.
 
 ```yaml

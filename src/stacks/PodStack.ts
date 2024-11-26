@@ -586,6 +586,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
       // Can't use ASG with a pre-specified ENI since ASGs assign ENIs directly
       // so we create the instance directly
       const instance = new Instance(this, `${fullPodName}-singleton`, {
+        subnetId: podOptions.singleton.subnet,
         launchTemplate: {
           name: lt.name,
         },
