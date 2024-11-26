@@ -535,23 +535,18 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         },
       ],
 
-      networkInterfaces: [
-        {
-          networkInterfaceId: podOptions.singleton?.networkInterfaceId,
-          deleteOnTermination: (!podOptions.singleton
-            ?.networkInterfaceId).toString(),
-          associatePublicIpAddress: podOptions.singleton?.networkInterfaceId
-            ? undefined
-            : (!!podOptions.publicIp).toString(),
-          // Don't add IPv6 addresses if we're using a reusable ENI
-          ipv6AddressCount: podOptions.singleton?.networkInterfaceId
-            ? undefined
-            : 1,
-        },
-      ],
-      vpcSecurityGroupIds: podOptions.singleton?.networkInterfaceId
-        ? undefined
-        : [podSg.securityGroupId],
+      // For the case when singleton is specified but no network interface is defined, see creation
+      // attributes for the AWS instance further below
+      networkInterfaces: podOptions.singleton?.networkInterfaceId
+        ? [
+            {
+              networkInterfaceId: podOptions.singleton.networkInterfaceId,
+              deleteOnTermination: false,
+              associatePublicIpAddress: (!!podOptions.publicIp).toString(),
+              securityGroups: [podSg.securityGroupId],
+            },
+          ]
+        : undefined,
 
       // Enable DNS resolution for the instance hostname (e.g. instance-id.ec2.internal)
       privateDnsNameOptions: {
@@ -595,6 +590,14 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         lifecycle: {
           ignoreChanges: ["tags", "user_data"],
         },
+        ...(podOptions.singleton.networkInterfaceId
+          ? {}
+          : {
+              associatePublicIpAddress: (!!podOptions.publicIp).toString(),
+              subnetId: podOptions.singleton.subnetId,
+              ipv6AddressCount: 1,
+              vpcSecurityGroupIds: [podSg.securityGroupId],
+            }),
       });
       if (podOptions.singleton.networkInterfaceId) {
         new NetworkInterfaceSgAttachment(

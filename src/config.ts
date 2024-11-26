@@ -73,6 +73,9 @@ export const DeployConfigSchema = Type.Object({
 
       singleton: Type.Optional(
         Type.Object({
+          subnetId: Type.Optional(
+            Type.String({ pattern: "^subnet-[a-f0-9]+$" }),
+          ),
           networkInterfaceId: Type.Optional(
             Type.TemplateLiteral("eni-${string}"),
           ),
