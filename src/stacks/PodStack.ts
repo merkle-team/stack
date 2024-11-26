@@ -588,7 +588,9 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
           autoRecovery: "default",
         },
         lifecycle: {
-          ignoreChanges: ["tags", "user_data"],
+          // Ignore security_groups due to a bug in the AWS provider that causes the instance to be replaced when it shouldn't.
+          // Setting vpc_security_group_ids doesn't have this issue.
+          ignoreChanges: ["tags", "user_data", "security_groups"],
         },
         ...(podOptions.singleton.networkInterfaceId
           ? {}
