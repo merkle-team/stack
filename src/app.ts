@@ -198,30 +198,21 @@ export class App {
     }
 
     console.log(
-      `Canceling instance refreshes for ASGs ${podNames.join(",")}...`
+      `Canceling instance refreshes for pods ${podNames.join(",")}...`
     );
 
-    const cancelPromises = asgs.map(
-      ({ AutoScalingGroupName, Tags, InstanceRefreshes }) => {
-        const podName = Tags?.findLast((tag) => tag.Key === "pod")?.Value;
-        if (!podName) {
-          // Shouldn't happen, but check for type safety
-          throw new Error(
-            `ASG ${AutoScalingGroupName} does not have a pod tag`
-          );
-        }
-
-        const status = (InstanceRefreshes || [])[0]?.Status;
-        if (!["Pending", "InProgress"].includes(status)) {
-          return; // Nothing to do
-        }
-
-        return this.cancelActiveInstanceRefresh(
-          AutoScalingGroupName as string,
-          podName
-        );
+    const cancelPromises = asgs.map(({ AutoScalingGroupName, Tags }) => {
+      const podName = Tags?.findLast((tag) => tag.Key === "pod")?.Value;
+      if (!podName) {
+        // Shouldn't happen, but check for type safety
+        throw new Error(`ASG ${AutoScalingGroupName} does not have a pod tag`);
       }
-    );
+
+      return this.cancelActiveInstanceRefresh(
+        AutoScalingGroupName as string,
+        podName
+      );
+    });
 
     const results = await Promise.allSettled(cancelPromises);
     for (const result of results) {
@@ -249,13 +240,19 @@ export class App {
       return; // No active refreshes
     }
 
-    // Can only be one active per ASG
-    const refreshId = refreshes[0].InstanceRefreshId as string;
+    // Ignore if there are no active refreshes
+    const refresh = refreshes[0];
+    if (!["Pending", "InProgress"].includes(refresh.Status || "")) return;
 
-    await asg.cancelInstanceRefresh({
-      AutoScalingGroupName: asgName,
-      InstanceRefreshId: refreshId,
-    });
+    try {
+      console.log(`Canceling active instance refresh for ${podName}...`);
+      await asg.cancelInstanceRefresh({
+        AutoScalingGroupName: asgName,
+      });
+      console.log(`Canceled active instance refresh for ${podName}`);
+    } catch (e: unknown) {
+      console.warn(`Unable to cancel instance refresh for ${podName}:`, e);
+    }
   }
 
   private async relevantAutoScalingGroups(podNames: string[]) {
