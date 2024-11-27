@@ -535,13 +535,15 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         },
       ],
 
+      vpcSecurityGroupIds: !podOptions.singleton?.networkInterfaceId ? [podSg.securityGroupId] : undefined,
+
       // For the case when singleton is specified but no network interface is defined, see creation
       // attributes for the AWS instance further below
       networkInterfaces: podOptions.singleton?.networkInterfaceId
         ? [
             {
               networkInterfaceId: podOptions.singleton.networkInterfaceId,
-              deleteOnTermination: false,
+              deleteOnTermination: 'false',
               associatePublicIpAddress: (!!podOptions.publicIp).toString(),
               securityGroups: [podSg.securityGroupId],
             },
@@ -595,7 +597,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         ...(podOptions.singleton.networkInterfaceId
           ? {}
           : {
-              associatePublicIpAddress: (!!podOptions.publicIp).toString(),
+              associatePublicIpAddress: !!podOptions.publicIp,
               subnetId: podOptions.singleton.subnetId,
               ipv6AddressCount: 1,
               vpcSecurityGroupIds: [podSg.securityGroupId],
