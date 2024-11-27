@@ -12,7 +12,7 @@ export class TerraformStateBackend extends Construct {
   constructor(
     scope: Construct,
     name: string,
-    options: TerraformStateBackendOptions,
+    options: TerraformStateBackendOptions
   ) {
     super(scope, name);
 
