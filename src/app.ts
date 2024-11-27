@@ -200,14 +200,18 @@ export class App {
         },
       ],
     });
+    console.log(`Found ${activeRefreshes.InstanceRefreshes?.length} active instance refreshes. Canceling...`);
     for (const refresh of activeRefreshes.InstanceRefreshes || []) {
+      console.log('Instance Refresh', JSON.stringify(refresh));
       const pod = refresh.Tags?.findLast((tag) => tag.Key === "pod")?.Value;
       if (!podNames.includes(pod)) continue;
       try {
+        console.log(`Canceling instance refresh ${refresh.InstanceRefreshId}...`);
         await asg.cancelInstanceRefresh({
           AutoScalingGroupName: refresh.AutoScalingGroupName as string,
           InstanceRefreshId: refresh.InstanceRefreshId as string,
         });
+        console.log(`Instance refresh ${refresh.InstanceRefreshId} Canceled`);
       } catch (e: unknown) {
         // Log error but otherwise ignore since it's possible we can still deploy
         console.warn(
