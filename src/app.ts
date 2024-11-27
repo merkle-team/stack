@@ -403,8 +403,8 @@ export class App {
           const [refresh] = refreshes;
           console.log(
             `${podName}: ${refresh.Status} - ${
-              refresh.PercentageComplete || "?"
-            }% - Instances remaining: ${refresh.InstancesToUpdate || "?"}. ${
+              refresh.PercentageComplete ?? "?"
+            }% - Instances remaining: ${refresh.InstancesToUpdate ?? "?"}. ${
               refresh.StatusReason || "..."
             }`
           );

@@ -134,7 +134,7 @@ program
   .description("Remove any active locks on the specified stack(s)")
   .argument(
     "[stacks...]",
-    "Stack to plan. If unspecified, all stacks are planned.",
+    "Stack to unlock. If unspecified, all stacks are unlocked.",
     []
   )
   .action(async (stacks) => {
