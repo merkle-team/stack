@@ -1,6 +1,6 @@
 {
   "name": "stack",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "license": "None",
   "private": true,
   "bin": {

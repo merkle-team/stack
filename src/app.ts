@@ -144,6 +144,9 @@ export class App {
       `Detected ${alreadyRunningInstances.length} already running instances`,
     );
 
+    // Terraform apply to ASG will fail if there are currently active instance refreshes, so cancel them
+    await this.cancelActiveInstanceRefreshes(podNames);
+
     if (!this.options.skipApply) {
       const child = await this.runCommand(
         [
@@ -181,6 +184,37 @@ export class App {
     // and at desired count, or consider the deploy a failure
     const waitExitStatus = await this.waitForInstanceRefreshes(podNames);
     return waitExitStatus;
+  }
+
+  private async cancelActiveInstanceRefreshes(podNames: string[]) {
+    const asg = new AutoScaling({ region: this.config.region });
+    const activeRefreshes = await asg.describeInstanceRefreshes({
+      Filters: [
+        {
+          Name: "status",
+          Values: ["Pending", "InProgress"],
+        },
+        {
+          Name: "tag:project",
+          Values: [this.config.project],
+        },
+      ],
+    });
+    for (const refresh of activeRefreshes.InstanceRefreshes || []) {
+      const pod = refresh.Tags?.findLast((tag) => tag.Key === "pod")?.Value;
+      if (!podNames.includes(pod)) continue;
+      try {
+        await asg.cancelInstanceRefresh({
+          AutoScalingGroupName: refresh.AutoScalingGroupName as string,
+          InstanceRefreshId: refresh.InstanceRefreshId as string,
+        });
+      } catch (e: unknown) {
+        // Log error but otherwise ignore since it's possible we can still deploy
+        console.warn(
+          `Failed to cancel instance refresh for pod ${pod}: ${e}`,
+        );
+      }
+    }
   }
 
   private async waitForInstanceRefreshes(
