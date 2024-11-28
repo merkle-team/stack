@@ -198,17 +198,12 @@ const DEPLOY_CONFIG_COMPILER = TypeCompiler.Compile(DeployConfigSchema);
 
 export type DeployConfig = Static<typeof DeployConfigSchema>;
 
-// Hack to work around weird issue with Bun + typing
-function extractErrors(iterator) {
-  return [...iterator];
-}
-
 export function parseConfig(configPath: string) {
   let config: DeployConfig = parseDocument(
     readFileSync(configPath).toString(),
     { merge: true }
   ).toJSON();
-  const configErrors = extractErrors(DEPLOY_CONFIG_COMPILER.Errors(config));
+  const configErrors = [...DEPLOY_CONFIG_COMPILER.Errors(config)];
   if (configErrors?.length) {
     for (const error of configErrors) {
       console.log(`${error.message} at ${error.path}`);

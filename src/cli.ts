@@ -1,5 +1,6 @@
 import { Command } from "@commander-js/extra-typings";
 import { App } from "./app";
+import { version } from "../package.json" assert { type: "json" };
 
 const CLI_PATH = import.meta.path;
 
@@ -13,6 +14,7 @@ function generateReleaseId() {
 
 const program = new Command();
 
+program.version(version);
 program.option("-d, --debug", "Display debug logs");
 program.option("-y, --yes", "Accept all prompts (POTENTIALLY DANGEROUS!)");
 program.option(

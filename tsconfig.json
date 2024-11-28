@@ -1,9 +1,25 @@
 {
   "compilerOptions": {
-    "noImplicitAny": false,
+    "allowJs": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "lib": ["esnext"],
+    "moduleResolution": "bundler",
+    "module": "esnext",
+    "noImplicitAny": true,
     "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "rootDir": ".",
+    "rootDirs": ["src"],
+    "baseUrl": "./",
+    "inlineSourceMap": true,
+    "inlineSources": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
     "strict": true,
     "noErrorTruncation": true,
-    "skipLibCheck": true
-  }
+    "target": "esnext"
+  },
+  "exclude": ["build", "node_modules"]
 }

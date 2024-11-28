@@ -18,7 +18,7 @@ import { Lb } from "@cdktf/provider-aws/lib/lb";
 import { readFileSync } from "fs";
 import { IamInstanceProfile } from "@cdktf/provider-aws/lib/iam-instance-profile";
 import { LaunchTemplate } from "@cdktf/provider-aws/lib/launch-template";
-import { generateDeployScript } from "../util";
+import { generateDeployScript, objectEntries } from "../util";
 import { AutoscalingGroup } from "@cdktf/provider-aws/lib/autoscaling-group";
 import { NetworkInterfaceSgAttachment } from "@cdktf/provider-aws/lib/network-interface-sg-attachment";
 import { Instance } from "@cdktf/provider-aws/lib/instance";
@@ -39,14 +39,6 @@ type PodStackOptions = {
   secretMappings: Record<string, string>;
   podOptions: DeployConfig["pods"][keyof DeployConfig["pods"]];
 };
-
-type ValueOf<T> = T[keyof T];
-type Entries<T> = [keyof T, ValueOf<T>][];
-
-// Same as `Object.entries()` but with type inference
-function objectEntries<T extends object>(obj: T): Entries<T> {
-  return Object.entries(obj) as Entries<T>;
-}
 
 export class PodStack extends TerraformStack {
   constructor(scope: Construct, id: string, options: PodStackOptions) {
@@ -622,7 +614,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         throw new Error(`Pod ${fullPodName} must specify autoscaling options`);
       }
 
-      const asg = new AutoscalingGroup(this, `${fullPodName}-asg`, {
+      new AutoscalingGroup(this, `${fullPodName}-asg`, {
         namePrefix: `${fullPodName}-`,
         minSize: 1,
         maxSize: 2, // Allow deploy of a new instance without downtime

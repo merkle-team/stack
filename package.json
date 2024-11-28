@@ -1,8 +1,9 @@
 {
   "name": "stack",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "license": "None",
   "private": true,
+  "type": "module",
   "bin": {
     "stack": "build/bin/stack"
   },
@@ -31,12 +32,12 @@
     "yaml": "^2.4.1"
   },
   "devDependencies": {
-    "@types/bun": "^1.1.9",
+    "@types/bun": "^1.1.14",
     "@types/inquirer": "^9.0.7",
     "cdktf": "^0.20.10",
     "husky": "^9.0.11",
     "lint-staged": "^15.2.2",
-    "typescript": "^5.6.2"
+    "typescript": "^5.7.2"
   },
   "lint-staged": {
     "*.ts": "bun run lint-staged"

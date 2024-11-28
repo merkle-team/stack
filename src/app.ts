@@ -3,7 +3,12 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { DeployConfig, parseConfig } from "./config";
 import { App as CdkApp } from "cdktf";
 import { EC2, Instance as EC2Instance } from "@aws-sdk/client-ec2";
-import { inBatchesOf, sleep } from "./util";
+import {
+  inBatchesOf,
+  sleep,
+  generateDeployScript,
+  objectEntries,
+} from "./util";
 import {
   AutoScaling,
   AutoScalingGroup,
@@ -11,7 +16,6 @@ import {
 } from "@aws-sdk/client-auto-scaling";
 import { DynamoDB } from "@aws-sdk/client-dynamodb";
 import { PodStack } from "./stacks/PodStack";
-import { generateDeployScript } from "./util";
 import { execa } from "execa";
 import {
   ListSecretsCommand,
@@ -100,9 +104,9 @@ export class App {
 
     console.info("Deploying stacks:", stackIds);
 
-    const release = this.options.release;
+    const release = this.options.release as string;
 
-    for (const [podName, podConfig] of Object.entries(this.config.pods)) {
+    for (const [podName, podConfig] of objectEntries(this.config.pods)) {
       if (podNames.length > 0 && !podNames.includes(podName)) {
         continue;
       }
@@ -1116,9 +1120,13 @@ export class App {
     let secrets: SecretListEntry[] = [];
     let nextToken;
     for (;;) {
-      const { SecretList, NextToken } = await secretsClient.send(
-        new ListSecretsCommand({ MaxResults: 100, NextToken: nextToken })
-      );
+      const {
+        SecretList,
+        NextToken,
+      }: { SecretList?: SecretListEntry[]; NextToken?: string } =
+        await secretsClient.send(
+          new ListSecretsCommand({ MaxResults: 100, NextToken: nextToken })
+        );
       secrets = [...secrets, ...(SecretList || [])];
       nextToken = NextToken;
       if (!nextToken) break;
@@ -1218,15 +1226,6 @@ export class App {
         language: "typescript",
       })
     );
-  }
-
-  private generateReleaseId() {
-    if (process.env.RELEASE) return process.env.RELEASE;
-    return `${new Date()
-      .toISOString()
-      .replace(/\:/g, "-")
-      .replace(/\./g, "-")
-      .replace("Z", "z")}`;
   }
 
   private getAllStackIds() {

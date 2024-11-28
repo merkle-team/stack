@@ -1,6 +1,14 @@
 import { stringToBase64 } from "uint8array-extras";
 import { DeployConfig } from "./config";
 
+type ValueOf<T> = T[keyof T];
+type Entries<T> = [keyof T, ValueOf<T>][];
+
+// Same as `Object.entries()` but with type inference
+export function objectEntries<T extends object>(obj: T): Entries<T> {
+  return Object.entries(obj) as Entries<T>;
+}
+
 export function sleep(millis: number) {
   return new Promise((resolve) => setTimeout(resolve, millis));
 }
