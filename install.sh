@@ -29,7 +29,7 @@ sudo=""
 
 auth-sudo() {
   if ! sudo -n >/dev/null 2>&1; then
-    echo "Enter your sudo password to install Dock in $location"
+    echo "Enter your sudo password to install Stack in $location"
     sudo -v
     sudo="sudo"
   fi
@@ -43,7 +43,7 @@ if [ ! -d $(dirname $location) ]; then
   fi
 fi
 
-if ! touch $location > /dev/null; then
+if ! touch $location > /dev/null 2>&1; then
   auth-sudo
   sudo touch $location
   sudo chown $(id -u):$(id -g) $location
