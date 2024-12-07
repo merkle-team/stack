@@ -403,22 +403,24 @@ export class PodStack extends TerraformStack {
       });
       tgs[endpointName] = tg;
 
-      const certData = new DataAwsAcmCertificate(
-        this,
-        `${fullPodName}-${endpointName}-cert`,
-        {
-          domain: endpointOptions.loadBalancer.cert,
-          statuses: ["ISSUED"],
-          types: ["AMAZON_ISSUED"],
-          mostRecent: true,
-        },
-      );
+      const certData = endpointOptions.loadBalancer?.cert
+        ? new DataAwsAcmCertificate(
+            this,
+            `${fullPodName}-${endpointName}-cert`,
+            {
+              domain: endpointOptions.loadBalancer.cert,
+              statuses: ["ISSUED"],
+              types: ["AMAZON_ISSUED"],
+              mostRecent: true,
+            },
+          )
+        : undefined;
 
       new LbListener(this, `${fullPodName}-${endpointName}-listener`, {
         loadBalancerArn: lbs[endpointOptions.loadBalancer.name].arn,
         port: endpointOptions.loadBalancer.port,
         protocol: endpointOptions.loadBalancer.protocol,
-        certificateArn: certData.arn,
+        certificateArn: certData?.arn,
         defaultAction: [
           {
             type: "forward",
