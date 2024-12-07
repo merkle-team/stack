@@ -149,7 +149,7 @@ export const DeployConfigSchema = Type.Object({
                   Type.Literal("TLS"),
                 ]),
                 port: Type.Integer({ minimum: 1, maximum: 65535 }),
-                cert: Type.String(),
+                cert: Type.Optional(Type.String()),
               }),
             ),
             public: Type.Optional(Type.Boolean({ default: false })),
