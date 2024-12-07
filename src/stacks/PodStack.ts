@@ -505,7 +505,8 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
       iamInstanceProfile: {
         name: instanceProfile.name,
       },
-      keyName: "sds2", // TODO: Update
+
+      keyName: "skeleton", // TODO: Remove and bake this into AMI itself
 
       metadataOptions: {
         httpEndpoint: "enabled",
