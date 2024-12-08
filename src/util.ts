@@ -103,7 +103,7 @@ if [ ! -d /home/${sshUser}/releases/${releaseId} ]; then
   if [ -f /home/${sshUser}/releases/current ]; then
     echo "Downloading and preparing Docker images on \$INSTANCE_ID \$private_ipv4 before swapping containers"
     docker compose build --pull
-    docker compose pull --quiet --ignore-buildable --policy=always
+    docker compose pull --quiet --ignore-buildable --policy=missing # Specify "missing" so we don't re-pull images we already have cached
   else
     # Avoid weird errors on first boot; see https://github.com/moby/moby/issues/22074#issuecomment-856551466
     sudo systemctl restart docker
