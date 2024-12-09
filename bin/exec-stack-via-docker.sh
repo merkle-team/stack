@@ -24,6 +24,13 @@ if [ -z "$STACK_VERSION" ]; then
   exit 1
 fi
 
+if [ "$1" = "update" ]; then
+  echo "Updating Stack to latest version..."
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/warpcast/stack/refs/heads/main/install.sh)"
+  echo "Stack now on version:"
+  exec stack --version
+fi
+
 # If no envars, try to load credentials from config file
 if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
   AWS_ACCESS_KEY_ID=$(sed -n 's/.*aws_access_key_id\s*=\s*\([a-zA-Z0-9+-_]*\).*/\1/p' ~/.aws/credentials 2>/dev/null)
