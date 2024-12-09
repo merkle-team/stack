@@ -34,7 +34,7 @@ fi
 # If no envars, try to load credentials from config file
 if [ -z "$AWS_ACCESS_KEY_ID" ] && [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
   # Get profile name from the first script argument
-  PROFILE_NAME="${AWS_PROFILE_NAME:-default}"
+  PROFILE_NAME="${AWS_PROFILE:-default}"
   AWS_ACCESS_KEY_ID=$(awk -v profile="[$PROFILE_NAME]" '$0 == profile {getline; print $3}' ~/.aws/credentials)
   AWS_SECRET_ACCESS_KEY=$(awk -v profile="[$PROFILE_NAME]" '$0 == profile {getline; getline; print $3}' ~/.aws/credentials)
 fi
