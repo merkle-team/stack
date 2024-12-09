@@ -1,6 +1,6 @@
 {
   "name": "stack",
-  "version": "0.0.28",
+  "version": "0.0.29",
   "license": "None",
   "private": true,
   "type": "module",
