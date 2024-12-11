@@ -454,10 +454,6 @@ export class App {
     const asg = new AutoScaling({ region: this.config.region });
     const instancesForPod: Record<string, EC2Instance[]> = {};
 
-    // HACK: Clear known hosts file to avoid issues with SSH client
-    // when connecting via jump host
-    await $`rm -f ~/.ssh/known_hosts`;
-
     let updateFailed = false;
     const updateResults = await Promise.allSettled(
       Object.entries(this.config.pods).map(async ([podName, podOptions]) => {
@@ -532,16 +528,11 @@ export class App {
                 const startTime = Date.now();
                 while (Date.now() - startTime < 120_000) {
                   try {
-                    const { sshUser, bastionUser, bastionHost } = podOptions;
+                    const { sshUser } = podOptions;
 
                     console.log(
                       `About to pull new containers for pod ${podName} on ${sshUser}@${ip}...`,
                     );
-
-                    // Record the current host key (workaround for SSH client jump host bug)
-                    if (bastionUser && bastionHost) {
-                      await $`ssh -T -F /dev/null -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${bastionUser}@${bastionHost} true`;
-                    }
 
                     const scriptInput = new Response(`
                       ${generateDeployScript(
@@ -554,9 +545,7 @@ export class App {
                       )}
                     `);
                     const connectResult =
-                      bastionUser && bastionHost
-                        ? await $`ssh -T -F /dev/null -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${scriptInput}`
-                        : await $`ssh -T -F /dev/null -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${scriptInput}`;
+                        await $`aws-ec2-ssh -T -F/dev/null -oLogLevel=ERROR -oBatchMode=yes -oStrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${scriptInput}`;
                     if (connectResult.exitCode !== 0) {
                       console.error(
                         "STDOUT",
@@ -715,7 +704,7 @@ export class App {
           }
         }
 
-        const { sshUser, bastionUser, bastionHost } = podOptions;
+        const { sshUser } = podOptions;
         const instanceSwapBatchSize = 5;
         await inBatchesOf(
           instancesForPod[podName],
@@ -808,9 +797,7 @@ export class App {
 
                   // Swap the containers
                   const connectResult =
-                    bastionUser && bastionHost
-                      ? await $`ssh -T -F /dev/null -J ${bastionUser}@${bastionHost} -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${scriptInput}`
-                      : await $`ssh -T -F /dev/null -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${scriptInput}`;
+                      await $`aws-ec2-ssh -T -F/dev/null -oLogLevel=ERROR -oBatchMode=yes -oStrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${scriptInput}`;
                   if (connectResult.exitCode !== 0) {
                     console.error(
                       "STDOUT",
@@ -1006,14 +993,12 @@ export class App {
           `Unable to determine pod for instance ${instances[0].InstanceId}`,
         );
       }
-      const { sshUser, bastionUser, bastionHost } =
+      const { sshUser } =
         this.config.pods[instancePod];
       // Only one to chose from, so select automatically
       return this.sshInto(
         sshUser,
         instances[0].PrivateIpAddress as string,
-        bastionUser,
-        bastionHost,
       );
     }
 
@@ -1046,8 +1031,8 @@ export class App {
       console.info(
         `Connecting to pod ${pod} (${instanceId}) at ${privateIp}...`,
       );
-      const { sshUser, bastionUser, bastionHost } = this.config.pods[pod];
-      return this.sshInto(sshUser, privateIp, bastionUser, bastionHost);
+      const { sshUser } = this.config.pods[pod];
+      return this.sshInto(sshUser, privateIp);
     } else {
       console.error("No instance selected");
       return 1;
@@ -1083,29 +1068,16 @@ export class App {
   private async sshInto(
     sshUser: string,
     host: string,
-    bastionUser?: string,
-    bastionHost?: string,
   ): Promise<ExitStatus> {
-    if (bastionUser && bastionHost) {
-      // Accept the SSH host key for the bastion automatically (we don't store host keys)
-      await execa({
-        all: true,
-      })`ssh -o LogLevel=ERROR -o BatchMode=yes -o StrictHostKeyChecking=no ${bastionUser}@${bastionHost} true`;
-    }
-
     const sshResult = Bun.spawnSync(
       [
-        "ssh",
-        ...(bastionUser ? ["-J", `${bastionUser}@${bastionHost}`] : []),
-        ...(this.options.yes ? ["-o", "BatchMode=yes"] : []),
-        "-o",
-        "LogLevel=ERROR",
+        "aws-ec2-ssh",
+        ...(this.options.yes ? ["-oBatchMode=yes"] : []),
+        "-oLogLevel=ERROR",
         // Gets really annoying to have to clear your known hosts file
         // all the time, so don't bother with host key checking
-        "-o",
-        "StrictHostKeyChecking=no",
-        "-o",
-        "UserKnownHostsFile=/dev/null",
+        "-oStrictHostKeyChecking=no",
+        "-oUserKnownHostsFile=/dev/null",
         `${sshUser}@${host}`,
       ],
       {

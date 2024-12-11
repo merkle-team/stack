@@ -1,0 +1,100 @@
+#!/bin/bash
+
+# Behaves like `ssh` but uses AWS EC2 Instance Connect tunnels.
+#
+# Requires AWS credentials allowing permission to search instances and send a public key, e.g.
+#   ec2:DescribeInstances
+#   ec2-instance-connect:SendSSHPublicKey
+
+set -euo pipefail
+
+# Initialize arrays for flags and command arguments
+flags=()
+command_args=()
+
+# Variable to store username@host
+username_host=""
+
+# Process input arguments
+while [[ $# -gt 0 ]]; do
+  arg="$1"
+
+  # Check if the argument starts with a flag
+  if [[ "$arg" == -* && -z "$username_host" ]]; then
+    flags+=("$arg")
+  elif [[ "$arg" == *@* && -z "$username_host" ]]; then
+    # Capture username@host
+    username_host="$arg"
+    ssh_user="$(echo "$arg" | cut -d@ -f1)"
+    ssh_host="$(echo "$arg" | cut -d@ -f2)"
+  else
+    # Collect remaining arguments as command
+    command_args+=("$arg")
+  fi
+  shift
+done
+
+# If no host specified, offer a fuzzy selection
+if [ -z "${username_host}" ]; then
+  echo "No user@hostname specified, fetching available instances..." >&2
+  instances="$(aws ec2 describe-instances --filter Name=instance-state-name,Values=running --output json | jq -r '.Reservations[].Instances[] | .InstanceId + "\t" + .PrivateIpAddress + "\t" + (.Tags[]? | select(.Key == "Name") | .Value // "(No name tag)")')"
+  ssh_host="$(echo "$instances" | sort -rk2 | fzf | cut -f2)"
+  ssh_user="${SSH_USER:-ec2-user}"
+fi
+
+resolve-ip() {
+  local host="$1"
+
+  if [[ "$host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "$host" # Input is already an IP address
+  else
+    # Resolve DNS hostname to IP
+    ip=$(dig +short "$host" | head -n 1)
+
+    if [[ -z "$ip" ]]; then
+      echo "Error: Unable to resolve host '$host'" >&2
+      return 1
+    else
+      echo "$ip"
+    fi
+  fi
+}
+
+ip_address="$(resolve-ip "$ssh_host")"
+instance_id="$(aws ec2 describe-instances --query "Reservations[*].Instances[?PrivateIpAddress == '${ip_address}' || PublicIpAddress == '${ip_address}'].InstanceId" --output text)"
+
+if [ -z "$instance_id" ]; then
+  echo "Unable to resolve $ssh_host to an AWS EC2 instance ID" >&2
+  exit 1
+fi
+
+echo "Generating one-time-use SSH key..." >&2
+tmp_key_file="$(mktemp)"
+cleanup() {
+  rm -rf "$tmp_key_file" >&2
+}
+trap cleanup HUP INT QUIT TERM EXIT
+ssh-keygen -t ed25519 -f "$tmp_key_file" -C "" -P "" -q <<<y >/dev/null 2>&1
+pub_key="$(cat "${tmp_key_file}.pub")"
+
+echo "Adding temporary SSH key to instance ID $instance_id (IP $ip_address)..." >&2
+aws ec2-instance-connect send-ssh-public-key \
+  --instance-id "$instance_id" \
+  --instance-os-user "$ssh_user" \
+  --ssh-public-key "$pub_key" \
+  --no-cli-pager > /dev/null
+
+# Specify default options which prevent annoying host key errors
+flags+=("-oStrictHostKeyChecking=no")
+flags+=("-oUserKnownHostsFile=/dev/null")
+
+echo "Connecting to instance ID $instance_id (IP $ip_address)..." >&2
+if [ ${#command_args[@]} -gt 0 ]; then
+  ssh -i "$tmp_key_file" \
+    "-oProxyCommand=aws ec2-instance-connect open-tunnel --instance-id $instance_id" \
+    "${flags[@]}" "$ssh_user@$instance_id.ec2.internal" "${command_args[@]}"
+else
+  ssh -i "$tmp_key_file" \
+    "-oProxyCommand=aws ec2-instance-connect open-tunnel --instance-id $instance_id" \
+    "${flags[@]}" "$ssh_user@$instance_id.ec2.internal"
+fi

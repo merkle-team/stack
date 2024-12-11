@@ -55,9 +55,21 @@ FROM base AS release
 
 RUN npm config set update-notifier false
 
+# Install dependencies for AWS CLI
+RUN apt-get update && apt-get install -y \
+  curl unzip groff less && \
+  rm -rf /var/lib/apt/lists/*
+
+# Install AWS CLI
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip" && \
+  unzip awscliv2.zip && \
+  ./aws/install && \
+  rm -rf awscliv2.zip aws
+
 COPY --from=install /temp/prod/node_modules node_modules
 COPY --from=prerelease /usr/src/app/build/. .
 COPY --from=prerelease /usr/src/app/package.json .
+COPY ./bin/aws-ec2-ssh /usr/local/bin/aws-ec2-ssh
 
 # Silence annoying punycode deprecation warning, and increase heap size for CDKTF
 ENV NODE_OPTIONS="--disable-warning=DEP0040 --max-old-space-size=4096"
