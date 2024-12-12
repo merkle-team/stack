@@ -35,8 +35,8 @@ fi
 if [ -z "$AWS_ACCESS_KEY_ID" ] && [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
   # Get profile name from the first script argument
   PROFILE_NAME="${AWS_PROFILE:-default}"
-  AWS_ACCESS_KEY_ID=$(awk -v profile="[$PROFILE_NAME]" '$0 == profile {getline; print $3}' ~/.aws/credentials)
-  AWS_SECRET_ACCESS_KEY=$(awk -v profile="[$PROFILE_NAME]" '$0 == profile {getline; getline; print $3}' ~/.aws/credentials)
+  AWS_ACCESS_KEY_ID=$(awk -v profile="[$PROFILE_NAME]" '$0 == profile {getline; print $3}' ~/.aws/credentials 2>/dev/null)
+  AWS_SECRET_ACCESS_KEY=$(awk -v profile="[$PROFILE_NAME]" '$0 == profile {getline; getline; print $3}' ~/.aws/credentials 2>/dev/null)
 fi
 
 if [ -t 0 ]; then
