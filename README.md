@@ -15,7 +15,7 @@ To avoid having to install Terraform + the Terraform CDK, a Docker image is prov
 
 ### Download
 
-Install a helper script in `/usr/local/bin/stack` which makes it so you can run Stack like a normal executable without having to provide all the `docker run` flags explicitly.
+Install a helper script in `/usr/local/bin/stack` which installs a shim so you can run Stack like a normal executable without having to provide all the `docker run` flags explicitly.
 
 ```
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/warpcast/stack/refs/heads/main/install.sh)"
