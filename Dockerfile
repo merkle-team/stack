@@ -1,6 +1,6 @@
 # TERRAFORM
 
-FROM hashicorp/terraform:1.9.8 AS terraform
+FROM hashicorp/terraform:1.10.2 AS terraform
 
 ## BASE ########################################################################
 
@@ -20,7 +20,7 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 apt-get update
 apt-get install -y docker-ce-cli docker-compose-plugin fzf ssh python3 make g++ unzip
 
-curl -fsSL https://bun.sh/install | bash -s "bun-v1.1.27"
+curl -fsSL https://bun.sh/install | bash -s "bun-v1.1.39"
 EOF
 
 ENV PATH=/root/.bun/bin:$PATH
