@@ -29,9 +29,15 @@ stack --help
 
 ...to download the image and confirm everything is working correctly.
 
-### Upgrading
+### Updating
 
-Just follow the [**Download**](#Download) instructions again to upgrade.
+Run the following:
+
+```
+stack update
+```
+
+Or just follow the [**Download**](#Download) instructions again.
 
 ### Uninstall
 
