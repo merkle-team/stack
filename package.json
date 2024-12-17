@@ -1,6 +1,6 @@
 {
   "name": "stack",
-  "version": "0.0.31",
+  "version": "0.0.32",
   "license": "None",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
     "@aws-sdk/client-ec2": "^3.521.0",
     "@aws-sdk/client-elastic-load-balancing-v2": "^3.521.0",
     "@aws-sdk/client-secrets-manager": "^3.529.1",
-    "@cdktf/provider-aws": "^19.41.0",
+    "@cdktf/provider-aws": "^19.47.0",
     "@cdktf/provider-null": "^10.0.1",
     "@commander-js/extra-typings": "^12.0.0",
     "@sinclair/typebox": "^0.32.15",
