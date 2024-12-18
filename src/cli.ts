@@ -29,7 +29,7 @@ program.option(
 program.option(
   "-c, --config <path>",
   "Path to the configuration file",
-  "deploy.yml"
+  ".stack/deploy.yml"
 );
 
 program
