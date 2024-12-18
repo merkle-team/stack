@@ -530,7 +530,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         },
       ],
 
-      vpcSecurityGroupIds: !podOptions.singleton?.networkInterfaceId
+      vpcSecurityGroupIds: !podOptions.singleton
         ? [podSg.securityGroupId]
         : undefined,
 
@@ -541,8 +541,6 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
             {
               networkInterfaceId: podOptions.singleton.networkInterfaceId,
               deleteOnTermination: "false",
-              associatePublicIpAddress: (!!podOptions.publicIp).toString(),
-              securityGroups: [podSg.securityGroupId],
             },
           ]
         : undefined,
@@ -589,7 +587,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         lifecycle: {
           // Ignore security_groups due to a bug in the AWS provider that causes the instance to be replaced when it shouldn't.
           // Setting vpc_security_group_ids doesn't have this issue.
-          ignoreChanges: ["tags", "user_data", "security_groups"],
+          ignoreChanges: ["tags", "user_data"],
         },
         ...(podOptions.singleton.networkInterfaceId
           ? {}
@@ -609,8 +607,6 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
             securityGroupId: podSg.securityGroupId,
           },
         );
-      } else {
-        instance.securityGroups = [podSg.securityGroupId];
       }
     } else {
       if (!podOptions.autoscaling) {

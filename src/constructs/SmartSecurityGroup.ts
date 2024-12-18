@@ -21,14 +21,14 @@ export class SmartSecurityGroup extends Construct {
   ) {
     super(scope, id);
 
-    const uniqueLbName = `${options.project}-${options.shortName}`;
+    const uniqueSgName = `${options.project}-${options.shortName}`;
 
-    const sg = new SecurityGroup(scope, `lb-${uniqueLbName}`, {
+    const sg = new SecurityGroup(scope, `sgrp-${uniqueSgName}`, {
       ...options,
-      namePrefix: `lb-sg-${uniqueLbName}-`, // Auto-generate suffix
+      namePrefix: `sgrp-${uniqueSgName}-`, // Auto-generate suffix
       vpcId: options.vpcId,
       tags: {
-        Name: uniqueLbName,
+        Name: uniqueSgName,
         shortName: options.shortName,
       },
       timeouts: {

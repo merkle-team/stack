@@ -784,7 +784,7 @@ export class App {
 
     # Start up all pod containers
     echo "Starting new containers for pod ${podName} on ${instanceId} ${ip} for release ${releaseId}"
-    docker compose up --detach --quiet-pull
+    docker compose up --detach --quiet-pull --pull=missing
 
     # Delete old images + containers
     docker system prune --force
