@@ -194,6 +194,16 @@ export class PodStack extends TerraformStack {
           `${fullPodName}-policy-document`,
           {
             statement: [
+              // Specifically allow authenticating with public ECR (not strictly, necessary but avoids warnings in logs)
+              {
+                actions: [
+                  "ecr-public:GetAuthorizationToken",
+                  "sts:GetServiceBearerToken",
+                ],
+                effect: "Allow",
+                resources: ["*"],
+              },
+              // Allow pulling from private ECR
               {
                 actions: ["ecr:GetAuthorizationToken"],
                 effect: "Allow",
@@ -582,10 +592,14 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
           name: lt.name,
         },
         maintenanceOptions: {
-          autoRecovery: podOptions.singleton?.terminatingTask ? "disabled" : "default",
+          autoRecovery: podOptions.singleton?.terminatingTask
+            ? "disabled"
+            : "default",
         },
         // Terminate the instance if it is a one-off task
-        instanceInitiatedShutdownBehavior: podOptions.singleton.terminatingTask ? "terminate" : undefined,
+        instanceInitiatedShutdownBehavior: podOptions.singleton.terminatingTask
+          ? "terminate"
+          : undefined,
         lifecycle: {
           // Ignore security_groups due to a bug in the AWS provider that causes the instance to be replaced when it shouldn't.
           // Setting vpc_security_group_ids doesn't have this issue.
