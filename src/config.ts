@@ -60,8 +60,6 @@ export const DeployConfigSchema = Type.Object({
 
       image: Type.String({ pattern: "^ami-[a-f0-9]+$" }),
       sshUser: Type.String({ default: "ec2-user" }),
-      bastionUser: Type.Optional(Type.String({ default: "ec2-user" })),
-      bastionHost: Type.Optional(Type.String()),
       instanceType: Type.String(),
       publicIp: Type.Optional(Type.Boolean()),
 
@@ -73,6 +71,7 @@ export const DeployConfigSchema = Type.Object({
 
       singleton: Type.Optional(
         Type.Object({
+          terminatingTask: Type.Optional(Type.Boolean({ default: false })),
           subnetId: Type.Optional(
             Type.String({ pattern: "^subnet-[a-f0-9]+$" })
           ),

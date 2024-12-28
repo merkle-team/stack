@@ -577,13 +577,15 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
     if (podOptions.singleton) {
       // Can't use ASG with a pre-specified ENI since ASGs assign ENIs directly
       // so we create the instance directly
-      const instance = new Instance(this, `${fullPodName}-singleton`, {
+      new Instance(this, `${fullPodName}-singleton`, {
         launchTemplate: {
           name: lt.name,
         },
         maintenanceOptions: {
-          autoRecovery: "default",
+          autoRecovery: podOptions.singleton?.terminatingTask ? "disabled" : "default",
         },
+        // Terminate the instance if it is a one-off task
+        instanceInitiatedShutdownBehavior: podOptions.singleton.terminatingTask ? "terminate" : undefined,
         lifecycle: {
           // Ignore security_groups due to a bug in the AWS provider that causes the instance to be replaced when it shouldn't.
           // Setting vpc_security_group_ids doesn't have this issue.

@@ -73,10 +73,8 @@ network:
 x-shared-pod-options: &shared-pod-options
   image: ami-00000000000000000 # Machine image to boot
   sshUser: ec2-user
-  bastionUser: ec2-user
-  bastionHost: 1.2.3.4 # IP Address of SSH bastion host
   compose: ./relative/path/to/deploy-docker-compose.yml
-  initScript: ec2-first-boot.sh
+  initScript: ./ec2-first-boot.sh
   rolePolicies:
     - arn:aws:iam::01234567890a:policy/my-project/send-email-policy
   deploy:
