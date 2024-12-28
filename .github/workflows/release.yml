@@ -6,7 +6,7 @@ on:
       - "v*.*.*"
 
 permissions:
-  contents: read
+  contents: write # Upload artifacts and cut releases
   id-token: write # OIDC for Depot
 
 jobs:
