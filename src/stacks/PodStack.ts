@@ -532,7 +532,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         {
           deviceName: ami.rootDeviceName,
           ebs: {
-            volumeSize: 100,
+            volumeSize: podOptions.rootVolumeSize || 100,
             volumeType: "gp3",
             encrypted: "true",
             deleteOnTermination: "true",
