@@ -58,10 +58,9 @@ else
   # Otherwise explicitly forward AWS auth envars
   exec docker run --rm $interactive_flags \
     --env-file <(env | grep -E '^STACK_') \
+    --env-file <(env | grep -E '^AWS') \
     -v$(pwd):/usr/src/app/workspace \
     -e "CI=$CI" \
-    -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-    -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
     -v "${SSH_AUTH_SOCK:-/ssh-agent}:/ssh-agent" \
     -e SSH_AUTH_SOCK=/ssh-agent \
     warpcast/stack:$STACK_VERSION "$@"
