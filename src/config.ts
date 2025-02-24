@@ -45,7 +45,7 @@ export const DeployConfigSchema = Type.Object({
         Type.Union([
           Type.Record(
             Type.String(),
-            Type.Union([Type.String(), Type.Undefined()])
+            Type.Union([Type.String(), Type.Undefined(), Type.Null()])
           ),
           Type.Array(Type.String({ pattern: "^[A-Z0-9_]+$" }), {
             uniqueItems: true,
