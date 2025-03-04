@@ -936,7 +936,6 @@ export class App {
   }
 
   public async lint(): Promise<ExitStatus> {
-    await this._synth();
     // By the time we reach here the configuration has already been validated
     console.info(`Stack configuration '${this.options.config}' is valid`);
     return 0;
