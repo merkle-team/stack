@@ -102,6 +102,11 @@ if [ ! -d /home/${sshUser}/releases/${releaseId} ]; then
 
   if [ -f /home/${sshUser}/releases/current ]; then
     echo "Downloading and preparing Docker images on \$INSTANCE_ID \$private_ipv4 before swapping containers"
+    # Work around a Docker Compose bug where it doesn't use ECR credentials on subsequent pulls (sometimes)
+    source <(cat .env | grep "^STACK_DOCKER_IMAGE=")
+    if [ -n "$STACK_DOCKER_IMAGE" ]; then
+      docker pull $STACK_DOCKER_IMAGE
+    fi
     docker compose build
     docker compose pull --quiet --ignore-buildable --policy=missing # Specify "missing" so we don't re-pull images we already have cached
   else
