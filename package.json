@@ -1,6 +1,6 @@
 {
   "name": "stack",
-  "version": "0.0.50",
+  "version": "0.0.51",
   "license": "None",
   "private": true,
   "type": "module",
@@ -19,11 +19,11 @@
     "@aws-sdk/client-ec2": "^3.521.0",
     "@aws-sdk/client-elastic-load-balancing-v2": "^3.521.0",
     "@aws-sdk/client-secrets-manager": "^3.529.1",
-    "@cdktf/provider-aws": "^19.47.0",
+    "@cdktf/provider-aws": "^19.60.1",
     "@cdktf/provider-null": "^10.0.1",
     "@commander-js/extra-typings": "^12.0.0",
     "@sinclair/typebox": "^0.32.15",
-    "cdktf-cli": "^0.20.11",
+    "cdktf-cli": "^0.20.12",
     "commander": "^12.0.0",
     "constructs": "^10.3.0",
     "execa": "^9.4.0",
@@ -34,10 +34,10 @@
   "devDependencies": {
     "@types/bun": "^1.1.14",
     "@types/inquirer": "^9.0.7",
-    "cdktf": "^0.20.11",
+    "cdktf": "^0.20.12",
     "husky": "^9.0.11",
     "lint-staged": "^15.2.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.8.3"
   },
   "lint-staged": {
     "*.ts": "bun run lint-staged"
