@@ -330,6 +330,7 @@ export class PodStack extends TerraformStack {
     });
 
     const tgs: Record<string, LbTargetGroup> = {};
+    const ingressRules: Record<string, VpcSecurityGroupIngressRule> = {};
     for (const [endpointName, endpointOptions] of Object.entries(
       podOptions.endpoints || {}
     )) {
@@ -348,7 +349,11 @@ export class PodStack extends TerraformStack {
           continue;
         }
 
-        new VpcSecurityGroupIngressRule(
+        // Don't create duplicate ingress rules for the same port
+        if (ingressRules[`${endpointOptions.target.port}`]) {
+          continue;
+        }
+        ingressRules[`${endpointOptions.target.port}`] = new VpcSecurityGroupIngressRule(
           this,
           `${fullPodName}-ingress-${endpointName}-ipv4-${ipProtocol}`,
           {
