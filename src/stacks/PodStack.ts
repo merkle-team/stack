@@ -293,7 +293,7 @@ export class PodStack extends TerraformStack {
       ipProtocol: "tcp",
       fromPort: 22,
       toPort: 22,
-      cidrIpv4: "10.0.0.0/8",
+      referencedSecurityGroupId: 'sg-0e425282e566cb2f4',
       tags: {
         Name: `${fullPodName}-ingress-ssh`,
         pod: options.shortName,
@@ -353,21 +353,22 @@ export class PodStack extends TerraformStack {
         if (ingressRules[`${endpointOptions.target.port}`]) {
           continue;
         }
-        ingressRules[`${endpointOptions.target.port}`] = new VpcSecurityGroupIngressRule(
-          this,
-          `${fullPodName}-ingress-${endpointName}-ipv4-${ipProtocol}`,
-          {
-            securityGroupId: podSg.securityGroupId,
-            ipProtocol,
-            fromPort: endpointOptions.target.port,
-            toPort: endpointOptions.target.port,
-            cidrIpv4: endpointOptions.public ? "0.0.0.0/0" : "10.0.0.0/8",
-            tags: {
-              Name: `${fullPodName}-ingress-${endpointName}-ipv4-${ipProtocol}`,
-              pod: options.shortName,
-            },
-          }
-        );
+        ingressRules[`${endpointOptions.target.port}`] =
+          new VpcSecurityGroupIngressRule(
+            this,
+            `${fullPodName}-ingress-${endpointName}-ipv4-${ipProtocol}`,
+            {
+              securityGroupId: podSg.securityGroupId,
+              ipProtocol,
+              fromPort: endpointOptions.target.port,
+              toPort: endpointOptions.target.port,
+              cidrIpv4: endpointOptions.public ? "0.0.0.0/0" : "10.0.0.0/8",
+              tags: {
+                Name: `${fullPodName}-ingress-${endpointName}-ipv4-${ipProtocol}`,
+                pod: options.shortName,
+              },
+            }
+          );
         new VpcSecurityGroupIngressRule(
           this,
           `${fullPodName}-ingress-${endpointName}-ipv6-${ipProtocol}`,
