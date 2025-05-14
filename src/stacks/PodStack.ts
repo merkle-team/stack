@@ -293,7 +293,7 @@ export class PodStack extends TerraformStack {
       ipProtocol: "tcp",
       fromPort: 22,
       toPort: 22,
-      referencedSecurityGroupId: 'sg-0e425282e566cb2f4',
+      referencedSecurityGroupId: "sg-0e425282e566cb2f4",
       tags: {
         Name: `${fullPodName}-ingress-ssh`,
         pod: options.shortName,
