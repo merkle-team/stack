@@ -350,10 +350,10 @@ export class PodStack extends TerraformStack {
         }
 
         // Don't create duplicate ingress rules for the same port
-        if (ingressRules[`${endpointOptions.target.port}`]) {
+        if (ingressRules[`${ipProtocol}-${endpointOptions.target.port}`]) {
           continue;
         }
-        ingressRules[`${endpointOptions.target.port}`] =
+        ingressRules[`${ipProtocol}-${endpointOptions.target.port}`] =
           new VpcSecurityGroupIngressRule(
             this,
             `${fullPodName}-ingress-${endpointName}-ipv4-${ipProtocol}`,
