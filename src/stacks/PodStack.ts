@@ -299,17 +299,6 @@ export class PodStack extends TerraformStack {
         pod: options.shortName,
       },
     });
-    new VpcSecurityGroupIngressRule(this, `${fullPodName}-ingress-nfs`, {
-      securityGroupId: podSg.securityGroupId,
-      ipProtocol: "tcp",
-      fromPort: 2049,
-      toPort: 2049,
-      cidrIpv4: "0.0.0.0/0", // TODO: Lock down further
-      tags: {
-        Name: `${fullPodName}-ingress-nfs`,
-        pod: options.shortName,
-      },
-    });
     new VpcSecurityGroupEgressRule(this, `${fullPodName}-egress-all-ipv4`, {
       securityGroupId: podSg.securityGroupId,
       ipProtocol: "-1",
