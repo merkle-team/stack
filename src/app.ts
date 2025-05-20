@@ -58,13 +58,18 @@ export class App {
 
     await this._synth();
 
+
     const failedStacks: string[] = [];
-    // Need to run in serial since Terraform doesn't support multiple independent processes modifying
-    // the plugin cache directory, and CDKTF doesn't support planning multiple stacks in parallel. See:
+    // A core assumption with running these in parallel is that each pod does not have dependencies on any other pod.
+    // Otherwise we would need to run in serial.
+    //
+    // We also disable the plugin cache directory since Terraform doesn't support multiple independent 
+    // processes modifying the plugin cache directory. See:
     // https://github.com/hashicorp/terraform-cdk/issues/2741
     // https://github.com/hashicorp/terraform/issues/31964
     // https://github.com/hashicorp/terraform-cdk/issues/3500#issuecomment-1951827605
-    for (const stackId of stackIds) {
+    process.env['CDKTF_DISABLE_PLUGIN_CACHE_ENV'] = "1";
+    const results = await Promise.allSettled(stackIds.map(async (stackId) => {
       console.info(
         "=========================================================================================="
       );
@@ -80,8 +85,14 @@ export class App {
       if (result.exitCode !== 0) {
         failedStacks.push(stackId);
       }
-    }
+    }));
 
+    for (const result of results) {
+      if (result.status === "rejected") {
+        console.error(result.reason);
+        return 1;
+      }
+    }
     if (failedStacks.length) {
       console.error("Stacks with plan failures:", failedStacks);
       return 1;
@@ -153,17 +164,31 @@ export class App {
     await this.rollbackActiveInstanceRefreshes(podNames);
 
     if (!this.options.skipApply) {
-      const child = await this.runCommand(
-        [
-          "bunx",
-          "cdktf",
-          "apply",
-          ...(this.options.yes ? ["--auto-approve"] : []),
-          ...stackIds,
-        ],
-        { env: { ...process.env, ...TF_ENVARS } }
-      );
-      if (child.exitCode !== 0) return child.exited;
+      // Allow us to run in parallel since Terraform doesn't support multiple independent processes modifying the plugin cache directory.
+      process.env['CDKTF_DISABLE_PLUGIN_CACHE_ENV'] = "1";
+      const results = await Promise.allSettled(stackIds.map(async (stackId) => {
+        const child = await this.runCommand(
+          [
+            "bunx",
+            "cdktf",
+            "apply",
+            "--auto-approve", // Since we're running in parallel, all these share stdin so we need to auto-approve
+            stackId,
+          ],
+          { env: { ...process.env, ...TF_ENVARS } }
+        );
+        return child.exitCode;
+      }));
+
+      for (const result of results) {
+        if (result.status === "rejected") {
+          console.error(result.reason);
+          return 1;
+        }
+        if (result.value !== null && result.value !== 0) {
+          return result.value;
+        }
+      }
     }
 
     // Only perform a swap if there are already running instances.
