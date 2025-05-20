@@ -58,34 +58,35 @@ export class App {
 
     await this._synth();
 
-
     const failedStacks: string[] = [];
     // A core assumption with running these in parallel is that each pod does not have dependencies on any other pod.
     // Otherwise we would need to run in serial.
     //
-    // We also disable the plugin cache directory since Terraform doesn't support multiple independent 
+    // We also disable the plugin cache directory since Terraform doesn't support multiple independent
     // processes modifying the plugin cache directory. See:
     // https://github.com/hashicorp/terraform-cdk/issues/2741
     // https://github.com/hashicorp/terraform/issues/31964
     // https://github.com/hashicorp/terraform-cdk/issues/3500#issuecomment-1951827605
-    process.env['CDKTF_DISABLE_PLUGIN_CACHE_ENV'] = "1";
-    const results = await Promise.allSettled(stackIds.map(async (stackId) => {
-      console.info(
-        "=========================================================================================="
-      );
-      console.info(`${stackId} plan output`);
-      console.info(
-        "↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓"
-      );
-      const result = await execa({
-        stdout: "inherit",
-        stderr: "inherit",
-      })`bunx cdktf plan --skip-synth ${stackId}`;
-      console.log("exit status", result.exitCode);
-      if (result.exitCode !== 0) {
-        failedStacks.push(stackId);
-      }
-    }));
+    process.env["CDKTF_DISABLE_PLUGIN_CACHE_ENV"] = "1";
+    const results = await Promise.allSettled(
+      stackIds.map(async (stackId) => {
+        console.info(
+          "=========================================================================================="
+        );
+        console.info(`${stackId} plan output`);
+        console.info(
+          "↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓"
+        );
+        const result = await execa({
+          stdout: "inherit",
+          stderr: "inherit",
+        })`bunx cdktf plan --skip-synth ${stackId}`;
+        console.log("exit status", result.exitCode);
+        if (result.exitCode !== 0) {
+          failedStacks.push(stackId);
+        }
+      })
+    );
 
     for (const result of results) {
       if (result.status === "rejected") {
@@ -165,20 +166,22 @@ export class App {
 
     if (!this.options.skipApply) {
       // Allow us to run in parallel since Terraform doesn't support multiple independent processes modifying the plugin cache directory.
-      process.env['CDKTF_DISABLE_PLUGIN_CACHE_ENV'] = "1";
-      const results = await Promise.allSettled(stackIds.map(async (stackId) => {
-        const child = await this.runCommand(
-          [
-            "bunx",
-            "cdktf",
-            "apply",
-            "--auto-approve", // Since we're running in parallel, all these share stdin so we need to auto-approve
-            stackId,
-          ],
-          { env: { ...process.env, ...TF_ENVARS } }
-        );
-        return child.exitCode;
-      }));
+      process.env["CDKTF_DISABLE_PLUGIN_CACHE_ENV"] = "1";
+      const results = await Promise.allSettled(
+        stackIds.map(async (stackId) => {
+          const child = await this.runCommand(
+            [
+              "bunx",
+              "cdktf",
+              "apply",
+              "--auto-approve", // Since we're running in parallel, all these share stdin so we need to auto-approve
+              stackId,
+            ],
+            { env: { ...process.env, ...TF_ENVARS } }
+          );
+          return child.exitCode;
+        })
+      );
 
       for (const result of results) {
         if (result.status === "rejected") {
