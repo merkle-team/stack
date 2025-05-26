@@ -56,6 +56,7 @@ export const DeployConfigSchema = Type.Object({
       image: Type.String({ pattern: "^ami-[a-f0-9]+$" }),
       sshUser: Type.String({ default: "ec2-user" }),
       instanceType: Type.String(),
+      instanceTags: Type.Optional(Type.Record(Type.String(), Type.String())),
       rootVolumeSize: Type.Optional(
         Type.Integer({
           minimum: 10,

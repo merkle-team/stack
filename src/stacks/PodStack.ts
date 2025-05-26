@@ -560,7 +560,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
       tagSpecifications: [
         {
           resourceType: "instance",
-          tags: sharedTags,
+          tags: { ...sharedTags, ...podOptions.instanceTags },
         },
         ...(podOptions.singleton?.networkInterfaceId
           ? [] // Avoid error "You cannot specify tags for network interfaces if there are no network interfaces being created by the request"
