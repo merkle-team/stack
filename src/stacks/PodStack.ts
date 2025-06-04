@@ -390,7 +390,7 @@ export class PodStack extends TerraformStack {
           "force-terminate-connection",
         healthCheck: {
           path:
-            endpointOptions.target.protocol === "HTTP"
+            endpointOptions.target.protocol.startsWith("HTTP")
               ? endpointOptions.target.healthCheck?.path
               : undefined,
           healthyThreshold:
