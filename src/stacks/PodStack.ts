@@ -38,6 +38,13 @@ type PodStackOptions = {
   privateSubnets?: string[];
   secretMappings: Record<string, string>;
   podOptions: DeployConfig["pods"][keyof DeployConfig["pods"]];
+  // Since we can't do any async operations in the constructor,
+  // inject current ASG's min/max/desired capacity if we need it.
+  currentAsg?: {
+    minSize: number;
+    maxSize: number;
+    desiredCapacity: number;
+  };
 };
 
 export class PodStack extends TerraformStack {
@@ -137,6 +144,7 @@ export class PodStack extends TerraformStack {
           (lbOptions.public ? options.publicSubnets : options.privateSubnets) ||
           undefined,
         idleTimeout: lbOptions.idleTimeout,
+        clientKeepAlive: lbOptions.clientKeepAlive,
         preserveHostHeader: lbOptions.type === "application" ? true : undefined,
         enableCrossZoneLoadBalancing: true,
         ipAddressType: "dualstack",
@@ -389,10 +397,9 @@ export class PodStack extends TerraformStack {
           endpointOptions.target.deregistration?.action ===
           "force-terminate-connection",
         healthCheck: {
-          path:
-            endpointOptions.target.protocol.startsWith("HTTP")
-              ? endpointOptions.target.healthCheck?.path
-              : undefined,
+          path: endpointOptions.target.protocol.startsWith("HTTP")
+            ? endpointOptions.target.healthCheck?.path
+            : undefined,
           healthyThreshold:
             endpointOptions.target.healthCheck?.healthyThreshold,
           unhealthyThreshold:
@@ -557,6 +564,11 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         hostnameType: "resource-name",
       },
 
+      tags: {
+        project: options.project,
+        pod: options.shortName,
+      },
+
       tagSpecifications: [
         {
           resourceType: "instance",
@@ -624,106 +636,131 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         throw new Error(`Pod ${fullPodName} must specify autoscaling options`);
       }
 
-      new AutoscalingGroup(this, `${fullPodName}-asg`, {
-        namePrefix: `${fullPodName}-`,
-        minSize: 1,
-        maxSize: 2, // Allow deploy of a new instance without downtime
-        desiredCapacity: 1,
-        defaultInstanceWarmup: 0, // How long to wait after instance is InService before considering metrics from instance for scaling decisions
-        defaultCooldown: 0, // Don't wait between scaling actions
-        healthCheckGracePeriod: podOptions.autoscaling.healthCheckGracePeriod,
-        healthCheckType: Object.keys(podOptions.endpoints || {}).length
-          ? "ELB"
-          : "EC2",
-        waitForCapacityTimeout: `${podOptions.autoscaling?.healthCheckGracePeriod}s`,
-        enabledMetrics: ["GroupDesiredCapacity", "GroupInServiceInstances"],
+      // Special new feature that does a full blue/green deploy instead of an instance refresh
+      const replaceAsgEachDeploy =
+        podOptions.deploy.replaceWith === "new-instances" &&
+        podOptions.deploy.orchestrator === "consul";
 
-        trafficSource: Object.values(tgs).map((tg) => ({
-          identifier: tg.arn,
-          type: "elbv2",
-        })),
+      if (!replaceAsgEachDeploy || podOptions.deploy._preserveAsg) {
+        let minSize = Math.max(1, podOptions.autoscaling.minHealthyInstances);
+        let maxSize = 2;
+        let desiredCapacity = Math.max(1, minSize);
+        if (options.currentAsg) {
+          minSize = options.currentAsg.minSize ?? 1;
+          maxSize = options.currentAsg.maxSize ?? 2;
+          desiredCapacity = options.currentAsg.desiredCapacity ?? 1;
+        }
 
-        suspendedProcesses: [
-          ...(podOptions.autoscaling.disableAZRebalance === true
-            ? ["AZRebalance"]
-            : []),
-          ...(podOptions.autoscaling.disableInstanceRefresh === true
-            ? ["InstanceRefresh"]
-            : []),
-          ...(podOptions.autoscaling.disableReplacingUnhealthyInstances === true
-            ? ["ReplaceUnhealthy"]
-            : []),
-        ],
+        const asgResource = new AutoscalingGroup(this, `${fullPodName}-asg`, {
+          namePrefix: `${fullPodName}-`,
+          minSize,
+          maxSize, // Allow deploy of a new instance without downtime
+          desiredCapacity,
+          defaultInstanceWarmup: 0, // How long to wait after instance is InService before considering metrics from instance for scaling decisions
+          defaultCooldown: 0, // Don't wait between scaling actions
+          healthCheckGracePeriod: podOptions.autoscaling.healthCheckGracePeriod,
+          healthCheckType: Object.keys(podOptions.endpoints || {}).length
+            ? "ELB"
+            : "EC2",
+          waitForCapacityTimeout: `${podOptions.autoscaling?.healthCheckGracePeriod}s`,
+          enabledMetrics: ["GroupDesiredCapacity", "GroupInServiceInstances"],
 
-        vpcZoneIdentifier: options.defaultSubnetIds,
-        protectFromScaleIn: false,
+          trafficSource: Object.values(tgs).map((tg) => ({
+            identifier: tg.arn,
+            type: "elbv2",
+          })),
 
-        terminationPolicies: ["OldestLaunchTemplate"],
+          suspendedProcesses: [
+            ...(podOptions.autoscaling.disableAZRebalance === true
+              ? ["AZRebalance"]
+              : []),
+            ...(podOptions.autoscaling.disableInstanceRefresh === true
+              ? ["InstanceRefresh"]
+              : []),
+            ...(podOptions.autoscaling.disableReplacingUnhealthyInstances ===
+            true
+              ? ["ReplaceUnhealthy"]
+              : []),
+          ],
 
-        instanceMaintenancePolicy: {
-          minHealthyPercentage: podOptions.autoscaling.minHealthyPercentage,
-          maxHealthyPercentage: podOptions.autoscaling.maxHealthyPercentage,
-        },
-        waitForElbCapacity: podOptions.autoscaling.minHealthyInstances,
+          vpcZoneIdentifier: options.defaultSubnetIds,
+          protectFromScaleIn: false,
 
-        instanceRefresh:
-          podOptions.deploy.replaceWith === "new-instances"
-            ? {
-                strategy: "Rolling",
-                preferences: {
-                  minHealthyPercentage:
-                    podOptions.autoscaling.minHealthyPercentage,
-                  maxHealthyPercentage:
-                    podOptions.autoscaling.maxHealthyPercentage,
-                  autoRollback: true,
-                  scaleInProtectedInstances: "Wait",
-                  skipMatching: true,
-                  standbyInstances: "Wait",
-                },
-              }
-            : undefined,
+          terminationPolicies: ["OldestLaunchTemplate"],
 
-        mixedInstancesPolicy: {
-          instancesDistribution: {
-            onDemandAllocationStrategy: "prioritized",
-            onDemandBaseCapacity: podOptions.autoscaling.onDemandBaseCapacity,
-            onDemandPercentageAboveBaseCapacity:
-              podOptions.autoscaling.onDemandPercentageAboveBaseCapacity,
-            spotAllocationStrategy: "lowest-price",
+          instanceMaintenancePolicy: {
+            minHealthyPercentage: podOptions.autoscaling.minHealthyPercentage,
+            maxHealthyPercentage: podOptions.autoscaling.maxHealthyPercentage,
           },
-          launchTemplate: {
-            launchTemplateSpecification: {
-              launchTemplateName: lt.name,
-              version: lt.latestVersion.toString(),
+          waitForElbCapacity: podOptions.autoscaling.minHealthyInstances,
+
+          instanceRefresh:
+            podOptions.deploy.replaceWith === "new-instances"
+              ? {
+                  strategy: "Rolling",
+                  preferences: {
+                    minHealthyPercentage:
+                      podOptions.autoscaling.minHealthyPercentage,
+                    maxHealthyPercentage:
+                      podOptions.autoscaling.maxHealthyPercentage,
+                    autoRollback: true,
+                    scaleInProtectedInstances: "Wait",
+                    skipMatching: true,
+                    standbyInstances: "Wait",
+                  },
+                }
+              : undefined,
+
+          mixedInstancesPolicy: {
+            instancesDistribution: {
+              onDemandAllocationStrategy: "prioritized",
+              onDemandBaseCapacity: podOptions.autoscaling.onDemandBaseCapacity,
+              onDemandPercentageAboveBaseCapacity:
+                podOptions.autoscaling.onDemandPercentageAboveBaseCapacity,
+              spotAllocationStrategy: "lowest-price",
+            },
+            launchTemplate: {
+              launchTemplateSpecification: {
+                launchTemplateName: lt.name,
+                version: lt.latestVersion.toString(),
+              },
             },
           },
-        },
 
-        tag: [
-          {
-            key: "project",
-            value: options.project,
-            propagateAtLaunch: true,
-          },
-          {
-            key: "pod",
-            value: options.shortName,
-            propagateAtLaunch: true,
-          },
-        ],
-
-        lifecycle: {
-          createBeforeDestroy: true, // Create new ASG before destroying old one so there's no downtime
-
-          // After we've created the ASG for the first time, this is managed separately
-          ignoreChanges: [
-            "min_size",
-            "max_size",
-            "desired_capacity",
-            "wait_for_elb_capacity",
+          tag: [
+            {
+              key: "project",
+              value: options.project,
+              propagateAtLaunch: true,
+            },
+            {
+              key: "pod",
+              value: options.shortName,
+              propagateAtLaunch: true,
+            },
           ],
-        },
-      });
+
+          lifecycle: {
+            createBeforeDestroy: true, // Create new ASG before destroying old one so there's no downtime
+
+            // After we've created the ASG for the first time, this is managed separately
+            ignoreChanges: [
+              "min_size",
+              "max_size",
+              "desired_capacity",
+              "wait_for_elb_capacity",
+            ],
+          },
+        });
+
+        // Don't update the current autoscaling group if the launch template changes
+        // since we're trying to preserve it during the migration
+        if (podOptions.deploy._preserveAsg) {
+          asgResource.addOverride("lifecycle.ignore_changes", [
+            "mixed_instances_policy[0].launch_template[0].launch_template_specification[0].version",
+          ]);
+        }
+      }
     }
   }
 }
