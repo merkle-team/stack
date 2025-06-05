@@ -69,6 +69,7 @@ export const DeployConfigSchema = Type.Object({
       rolePolicies: Type.Optional(Type.Array(Type.String())),
 
       initScript: Type.Optional(Type.String()),
+      preContainerShutdownScript: Type.Optional(Type.String()),
 
       compose: Type.String(),
 
@@ -116,6 +117,15 @@ export const DeployConfigSchema = Type.Object({
         ),
         shutdownTimeout: Type.Integer({ minimum: 0 }),
         instanceRefreshTimeout: Type.Optional(Type.Integer({ minimum: 300 })),
+        timeout: Type.Optional(Type.Integer({ minimum: 10 })),
+        orchestrator: Type.Optional(
+          Type.Union([
+            Type.Literal("asg"), // Default: use ASG's built-in logic to determine when deploy is finished
+            Type.Literal("consul"),
+          ])
+        ),
+        healthCheckService: Type.Optional(Type.String()), // If using Consul-based deploy, the service whose health to check
+        _preserveAsg: Type.Optional(Type.Boolean()),
       }),
 
       loadBalancers: Type.Optional(
@@ -129,6 +139,9 @@ export const DeployConfigSchema = Type.Object({
             public: Type.Optional(Type.Boolean({ default: false })),
             idleTimeout: Type.Optional(
               Type.Integer({ minimum: 1, default: 60 })
+            ),
+            clientKeepAlive: Type.Optional(
+              Type.Integer({ minimum: 60, maximum: 3600 })
             ),
           }),
           { additionalProperties: false, default: {} }
@@ -265,6 +278,15 @@ export function parseConfig(configPath: string) {
     } else if (!podConfig.autoscaling) {
       throw new Error(
         `Pod ${podName} must specify autoscaling options -- specify singleton if you want a single instance`
+      );
+    }
+
+    if (
+      podConfig.deploy.orchestrator === "consul" &&
+      !podConfig.deploy.healthCheckService
+    ) {
+      throw new Error(
+        `Pod ${podName} has no health check service name configured when using Consul-based deploy`
       );
     }
 

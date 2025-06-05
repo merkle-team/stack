@@ -5,12 +5,19 @@ import { version } from "../package.json" assert { type: "json" };
 const CLI_PATH = import.meta.path;
 
 function generateReleaseId() {
-  return `${new Date()
-    .toISOString()
-    .replace(/\:/g, "-")
-    .replace(/\./g, "-")
-    .replace("Z", "z")}`;
+  // Store the release ID in an environment variable so that we can pass to subprocesses,
+  // reusing any previously defined one if provided.
+  process.env["RELEASE_ID"] =
+    process.env["RELEASE_ID"] ||
+    `${new Date()
+      .toISOString()
+      .replace(/\:/g, "-")
+      .replace(/\./g, "-")
+      .replace("Z", "z")}`;
+
+  return process.env["RELEASE_ID"];
 }
+const RELEASE_ID = generateReleaseId();
 
 const program = new Command();
 
@@ -43,7 +50,7 @@ program
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    generateReleaseId()
+    RELEASE_ID
   )
   .action(async (stacks, options) => {
     const app = new App(CLI_PATH, { ...program.opts(), ...options });
@@ -56,7 +63,7 @@ program
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    generateReleaseId()
+    RELEASE_ID
   )
   .action(async (options) => {
     const app = new App(CLI_PATH, { ...program.opts(), ...options });
@@ -74,7 +81,7 @@ program
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    generateReleaseId()
+    RELEASE_ID
   )
   .option(
     "--skip-apply",
@@ -98,7 +105,7 @@ program
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    generateReleaseId()
+    RELEASE_ID
   )
   .action(async (stacks, options) => {
     const app = new App(CLI_PATH, { ...program.opts(), ...options });
@@ -124,7 +131,7 @@ program
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    generateReleaseId()
+    RELEASE_ID
   )
   .action(async (options) => {
     const app = new App(CLI_PATH, { ...program.opts(), ...options });

@@ -103,6 +103,8 @@ export class App {
   }
 
   public async deploy(stacks: string[]): Promise<ExitStatus> {
+    const deployStartTime = Date.now();
+
     if (this.options.applyOnly && this.options.skipApply) {
       throw new Error(
         "Cannot specify --apply-only and --skip-apply as they are mutually exclusive"
@@ -182,6 +184,8 @@ export class App {
           return child.exitCode;
         })
       );
+      // There's a bug in cdktf where the color output is not reset, so reset it manually so the rest of our text isn't colored
+      console.log("\x1b[0m");
 
       for (const result of results) {
         if (result.status === "rejected") {
@@ -194,13 +198,50 @@ export class App {
       }
     }
 
+    if (!this.options.applyOnly) {
+      const createAsgStatus = await this.createAsgs(podNames);
+      if (createAsgStatus !== 0) {
+        // Exit early before attempting to swap containers since there's something very wrong with AWS if we can't create ASGs
+        return createAsgStatus;
+      }
+    }
+
+    // Since we may have triggered an instance refresh, wait until all ASGs are healthy
+    // and at desired count, or consider the deploy a failure.
+    // We do this first since Consul-based health checks usually finish much faster.
+    // Note that if there are no instance-refresh-based pods, this will return quickly.
+    const waitInstanceRefreshesExitStatus = await this.waitForInstanceRefreshes(
+      podNames
+    );
+    // If there are Consul-based pods, wait for their health checks to pass.
+    // This ensures it is safe for us to remove the old instances from load balancers etc
+    // If there are none, this will return quickly.
+    const waitConsulServiceHealthExitStatus =
+      await this.waitForConsulServiceHealthChecks(podNames, release);
+
     // Only perform a swap if there are already running instances.
     if (!this.options.applyOnly && alreadyRunningInstances.length) {
       // It's possible the above apply command removed instances, so need to check again
       const currentlyRunningInstances = await this.alreadyRunningInstances(
         podNames
       );
+
       if (currentlyRunningInstances.length) {
+        const currentlyRunningInstancesByPod =
+          await this.alreadyRunningInstancesByPod(podNames);
+        // Run the pre-terminate script for each pod
+        const preTerminateScriptExitStatus =
+          await this.runPreContainerShutdownScripts(
+            podNames,
+            currentlyRunningInstancesByPod
+          );
+        if (preTerminateScriptExitStatus !== 0) {
+          console.error(
+            "Failed to run pre-terminate script for one or more pods"
+          );
+          return preTerminateScriptExitStatus;
+        }
+
         const swapStatus = await this.swapContainers(
           release,
           currentlyRunningInstances,
@@ -214,24 +255,402 @@ export class App {
       }
     }
 
-    // Since we may have triggered an instance refresh, wait until all ASGs are healthy
-    // and at desired count, or consider the deploy a failure
-    const waitExitStatus = await this.waitForInstanceRefreshes(podNames);
-    return waitExitStatus;
+    // If deploy is still appearing healthy, clean up old ASGs
+    if (
+      waitInstanceRefreshesExitStatus === 0 &&
+      waitConsulServiceHealthExitStatus === 0
+    ) {
+      const deleteAsgsExitStatus = await this.deleteAsgs(podNames);
+      if (deleteAsgsExitStatus !== 0) {
+        console.error("Failed to clean up one or more old ASGs");
+        return deleteAsgsExitStatus;
+      }
+    }
+
+    // Return whichever exit status is non-zero, otherwise it'll return 0.
+    const exitStatus =
+      waitInstanceRefreshesExitStatus === 0
+        ? waitConsulServiceHealthExitStatus
+        : waitInstanceRefreshesExitStatus; // TODO: Should we return 1 if any of these are non-zero?
+    if (exitStatus !== 0) {
+      console.error("Deploy failed");
+    }
+    console.log(
+      `Deploy completed successfully in ${Math.floor(
+        (Date.now() - deployStartTime) / 1000
+      )}s`
+    );
+    return exitStatus;
+  }
+
+  private async runPreContainerShutdownScripts(
+    podNames: string[],
+    currentlyRunningInstancesByPod: Record<string, EC2Instance[]>
+  ): Promise<ExitStatus> {
+    const preContainerShutdownScriptPromises = podNames
+      .filter((podName) => {
+        const podConfig = this.config.pods[podName];
+        // Only do this for the new Consul-based pods that use autoscaling
+        return (
+          podConfig.autoscaling &&
+          podConfig.deploy.replaceWith === "new-instances" &&
+          podConfig.deploy.orchestrator === "consul" &&
+          podConfig.preContainerShutdownScript
+        );
+      })
+      .map(async (podName) => {
+        const currentlyRunningPodInstances =
+          currentlyRunningInstancesByPod[podName];
+        if (!currentlyRunningPodInstances?.length) {
+          console.warn(
+            `No running instances found for pod ${podName}, skipping pre-container-shutdown script`
+          );
+          return;
+        }
+
+        await this.runPreContainerShutdownScript(
+          podName,
+          currentlyRunningPodInstances
+        );
+      });
+
+    const results = await Promise.allSettled(
+      preContainerShutdownScriptPromises
+    );
+    let preContainerShutdownScriptFailed = false;
+    for (const result of results) {
+      if (result.status === "rejected") {
+        preContainerShutdownScriptFailed = true;
+        console.error(
+          "Failed to run pre-container-shutdown script:",
+          result.reason
+        );
+      }
+    }
+    return preContainerShutdownScriptFailed ? 1 : 0;
+  }
+
+  private async runPreContainerShutdownScript(
+    podName: string,
+    currentlyRunningInstances: EC2Instance[]
+  ) {
+    const podConfig = this.config.pods[podName];
+    const sshUser = podConfig.sshUser;
+
+    if (!podConfig.preContainerShutdownScript) {
+      return;
+    }
+
+    const asgClient = new AutoScaling({ region: this.config.region });
+
+    // If pod is part of ASG, check desired capacity before proceeding
+    if (podConfig.autoscaling) {
+      const asgResult = await asgClient.describeAutoScalingGroups({
+        Filters: [
+          {
+            Name: "tag:project",
+            Values: [this.config.project],
+          },
+          {
+            Name: "tag:pod",
+            Values: [podName],
+          },
+        ],
+      });
+      if (!asgResult?.AutoScalingGroups?.length) {
+        return; // Nothing to do
+      }
+
+      // Most recent ASG is the last deploy
+      const group = asgResult.AutoScalingGroups?.sort(
+        (a, b) =>
+          (b.CreatedTime?.getTime() ?? 0) - (a.CreatedTime?.getTime() ?? 0)
+      )[0];
+      if (group?.DesiredCapacity === 0) {
+        console.warn(
+          `Desired capacity for ${group.AutoScalingGroupName} is 0. Skipping running of pre-container-shutdown script`
+        );
+        return;
+      }
+    }
+
+    let runPreContainerShutdownScriptFailed = false;
+    const sshConnectBatchSize = 5; // Don't open too many simultaneous connections at once
+    await inBatchesOf(
+      currentlyRunningInstances,
+      sshConnectBatchSize,
+      async (batchOfInstances) => {
+        const runBatchResults = await Promise.allSettled(
+          batchOfInstances.map(async (instance) => {
+            const ip = instance.PrivateIpAddress;
+            if (!ip) {
+              // Shouldn't happen, but include for type safety
+              throw new Error(
+                `Instance ${instance.InstanceId} does not have a private IP address`
+              );
+            }
+
+            const connectResult =
+              await $`aws-ec2-ssh -T -F/dev/null -oLogLevel=ERROR -oBatchMode=yes -oStrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${new Response(
+                podConfig.preContainerShutdownScript
+              )}`;
+            if (connectResult.exitCode !== 0) {
+              console.error(
+                "STDOUT",
+                connectResult.stdout.toString(),
+                "STDERR",
+                connectResult.stderr.toString()
+              );
+              throw new Error(
+                `Error connecting to ${ip} (exit code ${connectResult.exitCode})`
+              );
+            }
+          })
+        );
+
+        for (const runResult of runBatchResults) {
+          if (runResult.status === "rejected") {
+            runPreContainerShutdownScriptFailed = true;
+            console.error(
+              "Failed to run pre-container-shutdown script:",
+              runResult.reason
+            );
+          }
+        }
+      }
+    );
+
+    if (runPreContainerShutdownScriptFailed) {
+      throw new Error(
+        `Failed to run pre-container-shutdown script for one or more instances for pod ${podName}`
+      );
+    }
+  }
+
+  private async createAsgs(podNames: string[]): Promise<ExitStatus> {
+    const createAsgPromises = podNames
+      .filter((podName) => {
+        const podConfig = this.config.pods[podName];
+        // Only do this for the new Consul-based pods that use autoscaling
+        return (
+          podConfig.autoscaling &&
+          podConfig.deploy.replaceWith === "new-instances" &&
+          podConfig.deploy.orchestrator === "consul"
+        );
+      })
+      .map((podName) => this.createAsg(podName));
+
+    const results = await Promise.allSettled(createAsgPromises);
+    for (const result of results) {
+      if (result.status === "rejected") {
+        console.error("Failed to create ASG:", result.reason);
+        return 1;
+      }
+    }
+    return 0;
+  }
+
+  private async createAsg(podName: string) {
+    const podConfig = this.config.pods[podName];
+    const releaseId = this.options.release as string;
+    const fullPodName = `${this.config.project}-${podName}`;
+
+    const asgClient = new AutoScaling({ region: this.config.region });
+    const ec2Client = new EC2({ region: this.config.region });
+
+    const launchTemplatesResult = await ec2Client.describeLaunchTemplates({
+      Filters: [
+        {
+          Name: "tag:project",
+          Values: [this.config.project],
+        },
+        {
+          Name: "tag:pod",
+          Values: [podName],
+        },
+      ],
+    });
+    const lt = launchTemplatesResult.LaunchTemplates?.[0];
+    if (!lt) {
+      // Shouldn't happen, but check for type safety
+      throw new Error(
+        `No launch template found for pod ${podName} -- unable to create ASG`
+      );
+    }
+
+    const asgResult = await asgClient.describeAutoScalingGroups({
+      Filters: [
+        {
+          Name: "tag:project",
+          Values: [this.config.project],
+        },
+        {
+          Name: "tag:pod",
+          Values: [podName],
+        },
+      ],
+    });
+    // Get the last created ASG, since there might be multiple ASGs due to other/earlier deployments that haven't yet been cleaned up
+    const currentAsg = asgResult.AutoScalingGroups?.sort(
+      (a, b) =>
+        (b.CreatedTime?.getTime() ?? 0) - (a.CreatedTime?.getTime() ?? 0)
+    )[0];
+    if (!currentAsg) {
+      console.log(
+        `No existing ASG found for pod ${podName}, creating new one with default min/max/desired capacity`
+      );
+    }
+
+    const minSize = currentAsg?.MinSize ?? 1;
+    const maxSize = currentAsg?.MaxSize ?? 2;
+    const desiredCapacity = currentAsg?.DesiredCapacity ?? 1;
+
+    const defaultSubnetIds = podConfig.singleton
+      ? undefined
+      : podConfig.publicIp
+      ? this.config.network?.subnets?.public
+      : this.config.network?.subnets?.private;
+
+    const asgName = `${this.config.project}-${podName}-${releaseId}`;
+    await asgClient.createAutoScalingGroup({
+      AutoScalingGroupName: asgName,
+      MinSize: minSize,
+      MaxSize: maxSize,
+      DesiredCapacity: desiredCapacity,
+      HealthCheckType: "EC2",
+      HealthCheckGracePeriod:
+        this.config.pods[podName]?.autoscaling?.healthCheckGracePeriod,
+      DefaultCooldown: 0,
+      DefaultInstanceWarmup: 0,
+      NewInstancesProtectedFromScaleIn: false,
+      VPCZoneIdentifier: defaultSubnetIds?.join(", "),
+
+      InstanceMaintenancePolicy: {
+        MinHealthyPercentage: podConfig?.autoscaling?.minHealthyPercentage,
+        MaxHealthyPercentage: podConfig?.autoscaling?.maxHealthyPercentage,
+      },
+
+      Tags: [
+        {
+          Key: "project",
+          Value: this.config.project,
+          PropagateAtLaunch: true,
+          ResourceType: "auto-scaling-group",
+          ResourceId: `${fullPodName}-${releaseId}`,
+        },
+        {
+          Key: "pod",
+          Value: podName,
+          PropagateAtLaunch: true,
+          ResourceType: "auto-scaling-group",
+          ResourceId: `${fullPodName}-${releaseId}`,
+        },
+        {
+          Key: "release",
+          Value: releaseId,
+          PropagateAtLaunch: true,
+          ResourceType: "auto-scaling-group",
+          ResourceId: `${fullPodName}-${releaseId}`,
+        },
+      ],
+
+      MixedInstancesPolicy: {
+        InstancesDistribution: {
+          OnDemandAllocationStrategy: "prioritized",
+          OnDemandBaseCapacity:
+            this.config.pods[podName]?.autoscaling?.onDemandBaseCapacity,
+          OnDemandPercentageAboveBaseCapacity:
+            this.config.pods[podName]?.autoscaling
+              ?.onDemandPercentageAboveBaseCapacity,
+          SpotAllocationStrategy: "lowest-price",
+        },
+        LaunchTemplate: {
+          LaunchTemplateSpecification: {
+            LaunchTemplateName: fullPodName,
+            Version: lt.LatestVersionNumber?.toString() ?? "$Latest",
+          },
+        },
+      },
+    });
+
+    console.log(`Created ASG ${asgName} for pod ${podName}`);
+  }
+
+  private async deleteAsgs(podNames: string[]): Promise<ExitStatus> {
+    const deleteAsgPromises = podNames
+      .filter(
+        (podName) =>
+          this.config.pods[podName].deploy.replaceWith === "new-instances" &&
+          this.config.pods[podName].deploy.orchestrator === "consul"
+      )
+      .map((podName) => this.deleteAsg(podName));
+    const results = await Promise.allSettled(deleteAsgPromises);
+    let deleteAsgFailed = false;
+    for (const result of results) {
+      if (result.status === "rejected") {
+        console.error("Failed to delete ASG:", result.reason);
+        deleteAsgFailed = true;
+      }
+    }
+    return deleteAsgFailed ? 1 : 0;
+  }
+
+  private async deleteAsg(podName: string) {
+    const releaseId = this.options.release as string;
+    const asgClient = new AutoScaling({ region: this.config.region });
+
+    const asgResult = await asgClient.describeAutoScalingGroups({
+      Filters: [
+        {
+          Name: "tag:project",
+          Values: [this.config.project],
+        },
+        {
+          Name: "tag:pod",
+          Values: [podName],
+        },
+      ],
+    });
+    // Get the last created ASG, since there might be multiple ASGs due to other/earlier deployments that haven't yet been cleaned up
+    const oldAsgs = asgResult.AutoScalingGroups?.filter(
+      (asg) =>
+        asg.Tags?.find((tag) => tag.Key === "release")?.Value !== releaseId &&
+        asg.AutoScalingGroupName?.endsWith(
+          "z"
+        ) /* Only delete ASGs with release ID in name (new type of ASG) */
+    );
+    if (oldAsgs?.length) {
+      const results = await Promise.allSettled(
+        oldAsgs?.map(async (asg) => {
+          console.log(
+            `Deleting old ASG ${asg.AutoScalingGroupName} for pod ${podName}`
+          );
+          await asgClient.deleteAutoScalingGroup({
+            AutoScalingGroupName: asg.AutoScalingGroupName,
+            ForceDelete: true,
+          });
+        })
+      );
+      let deleteAsgFailed = false;
+      for (const result of results) {
+        if (result.status === "rejected") {
+          deleteAsgFailed = true;
+          console.error("Failed to delete ASG:", result.reason);
+        }
+      }
+      return deleteAsgFailed ? 1 : 0;
+    }
+    return 0;
   }
 
   private async rollbackActiveInstanceRefreshes(
     podNames: string[]
   ): Promise<ExitStatus> {
-    const asgs = await this.relevantAutoScalingGroups(podNames);
+    const asgs = await this.relevantAutoScalingGroupsForRollback(podNames);
     if (!asgs.length) {
       console.log("No applicable ASGs to wait for instance refreshes");
       return 0; // Nothing to do
     }
-
-    console.log(
-      `Canceling instance refreshes for pods ${podNames.join(",")}...`
-    );
 
     const cancelPromises = asgs.map(({ AutoScalingGroupName, Tags }) => {
       const podName = Tags?.findLast((tag) => tag.Key === "pod")?.Value;
@@ -290,7 +709,7 @@ export class App {
     }
   }
 
-  private async relevantAutoScalingGroups(podNames: string[]) {
+  private async relevantAutoScalingGroupsForRollback(podNames: string[]) {
     const asg = new AutoScaling({ region: this.config.region });
 
     // Fetch all ASGs for the pods we're deploying in chunks to avoid AWS limits
@@ -330,6 +749,202 @@ export class App {
     }
 
     return asgs;
+  }
+
+  private async relevantAutoScalingGroups(podNames: string[]) {
+    const asg = new AutoScaling({ region: this.config.region });
+
+    // Fetch all ASGs for the pods we're deploying in chunks to avoid AWS limits
+    const asgs: AutoScalingGroup[] = [];
+    const maxPodsPerFetch = 5; // AWS limit
+    for (let offset = 0; offset < podNames.length; offset += maxPodsPerFetch) {
+      const podTagValues: string[] = podNames.slice(
+        offset,
+        Math.min(offset + maxPodsPerFetch, podNames.length)
+      );
+      const asgsResult = await asg.describeAutoScalingGroups({
+        Filters: [
+          {
+            Name: "tag:project",
+            Values: [this.config.project],
+          },
+          {
+            Name: "tag:pod",
+            Values: podTagValues,
+          },
+        ],
+      });
+      for (const asg of asgsResult.AutoScalingGroups || []) {
+        const podName = asg.Tags?.findLast((tag) => tag.Key === "pod")?.Value;
+        if (!podName) {
+          // Shouldn't happen due to above filter, but check for type safety
+          console.warn(
+            `ASG ${asg.AutoScalingGroupName} for ${this.config.project} project does not have a pod tag`
+          );
+          continue;
+        }
+        // If autoscaling is configured for this pod, include it. Otherwise it's a singleton
+        if (
+          this.config.pods[podName].autoscaling &&
+          this.config.pods[podName].deploy.orchestrator !== "consul"
+        ) {
+          asgs.push(asg);
+        }
+      }
+    }
+
+    return asgs;
+  }
+
+  private async getDesiredInstanceCountForPod(
+    asgClient: AutoScaling,
+    podName: string
+  ): Promise<number> {
+    const asgsResult = await asgClient.describeAutoScalingGroups({
+      Filters: [
+        {
+          Name: "tag:project",
+          Values: [this.config.project],
+        },
+        {
+          Name: "tag:pod",
+          Values: [podName],
+        },
+      ],
+    });
+    const asg: AutoScalingGroup | undefined = asgsResult.AutoScalingGroups?.[0];
+    return (
+      asg?.DesiredCapacity ??
+      this.config.pods[podName].autoscaling?.minHealthyInstances ??
+      1
+    );
+  }
+
+  private async waitForConsulServiceHealthChecks(
+    podNames: string[],
+    releaseId: string
+  ): Promise<ExitStatus> {
+    const relevantPodsWithConsulHealthChecks = Object.entries(
+      this.config.pods
+    ).filter(
+      ([podName, podConfig]) =>
+        podNames.includes(podName) && podConfig.deploy.orchestrator === "consul"
+    );
+    if (!relevantPodsWithConsulHealthChecks.length) {
+      return 0; // Nothing to do
+    }
+
+    console.log(
+      `Waiting for Consul service health checks for pods ${relevantPodsWithConsulHealthChecks
+        .map(([podName]) => podName)
+        .join(", ")}...`
+    );
+
+    const ec2Client = new EC2({ region: this.config.region });
+    const instancesResult = await ec2Client.describeInstances({
+      Filters: [
+        {
+          Name: "tag:ConsulServer",
+          Values: ["true"],
+        },
+        {
+          Name: "instance-state-name",
+          Values: ["running"],
+        },
+      ],
+    });
+    const consulServerIps =
+      instancesResult.Reservations?.flatMap((reservation) =>
+        reservation.Instances?.map((instance) => instance.PrivateIpAddress)
+      ).filter((ip) => ip !== undefined) || [];
+    if (!consulServerIps.length) {
+      throw new Error("No Consul servers found");
+    }
+    const consulHost = `https://${consulServerIps[0]}:8501`; // TODO: Make this configurable (need a HTTPS load balancer)
+    const serviceTag = releaseId;
+
+    const startTime = Date.now();
+    const asgClient = new AutoScaling({ region: this.config.region });
+    const results = await Promise.allSettled(
+      relevantPodsWithConsulHealthChecks.map(async ([podName, podConfig]) => {
+        const serviceName = podConfig.deploy.healthCheckService;
+        if (!serviceName) {
+          // Shouldn't happen, but check for type safety
+          throw new Error(
+            `Pod ${podName} has no health check service name configured`
+          );
+        }
+
+        const healthCheckUrl = new URL(
+          `${consulHost}/v1/health/service/${serviceName}`
+        );
+        healthCheckUrl.searchParams.append("passing", "true");
+        healthCheckUrl.searchParams.append(
+          "filter",
+          `"${serviceTag}" in Service.Tags`
+        );
+
+        const deployTimeoutMs =
+          (this.config.pods[podName].deploy.timeout ?? 600) * 1000; // Default to 10 minutes if not specified
+        while (Date.now() - startTime < deployTimeoutMs) {
+          process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"; // TODO: allow configuring cert chain
+          const healthCheckResult = await fetch(healthCheckUrl.toString());
+          delete process.env["NODE_TLS_REJECT_UNAUTHORIZED"];
+          if (!healthCheckResult.ok) {
+            throw new Error(
+              `Failed to check health of ${serviceName} service: ${healthCheckResult.status} - ${healthCheckResult.statusText}`
+            );
+          }
+          const healthCheckData = await healthCheckResult.json();
+          if (Array.isArray(healthCheckData)) {
+            // We re-check desired instance count since it may have changed manually in the AWS console since the deploy started
+            const desiredInstanceCount =
+              await this.getDesiredInstanceCountForPod(asgClient, podName);
+
+            if (healthCheckData.length >= desiredInstanceCount) {
+              console.log(
+                `Pod ${podName} Consul service [${serviceName}] health checks passed`
+              );
+              return;
+            }
+
+            console.log(
+              `Waiting for pod ${podName} Consul sevice [${serviceName}] health checks: ${healthCheckData.length} / ${desiredInstanceCount}`
+            );
+          } else {
+            throw new Error(
+              `Unexpected Consul service health check response: ${JSON.stringify(
+                healthCheckData
+              )}`
+            );
+          }
+
+          await sleep(5_000);
+        }
+
+        throw new Error(
+          `Waiting for Consul service health checks took longer than ${deployTimeoutMs}ms`
+        );
+      })
+    );
+
+    let deployFailed = false;
+    for (const result of results) {
+      if (result.status === "rejected") {
+        deployFailed = true;
+        console.error(result.reason);
+      }
+    }
+
+    if (deployFailed) {
+      console.error(
+        "One or more pods failed to pass their Consul service health checks"
+      );
+      return 1;
+    }
+
+    console.log("All Consul service health checks passed");
+    return 0;
   }
 
   private async waitForInstanceRefreshes(
@@ -375,7 +990,7 @@ export class App {
       return 1;
     }
 
-    console.log("Deploy completed successfully");
+    console.log("Instance refreshes completed");
     return 0;
   }
 
@@ -914,6 +1529,16 @@ export class App {
       : this.getAllStackIds();
     console.info("Destroying stacks:", stackIds);
 
+    // Need to kick off ASG deletion before Terrafrom destroy since otherwise it will block waiting on the instances to be terminated
+    const podNames = this.extractPodNames(stackIds);
+    const deleteAsgsExitStatus = await this.deleteAsgs(podNames);
+    if (deleteAsgsExitStatus !== 0) {
+      console.error(
+        "Failed to clean up one or more ASGs before destroying stacks"
+      );
+      return deleteAsgsExitStatus;
+    }
+
     const child = await this.runCommand(
       [
         "bunx",
@@ -1062,6 +1687,68 @@ export class App {
     }
   }
 
+  private async alreadyRunningInstancesByPod(
+    pods: string[]
+  ): Promise<Record<string, EC2Instance[]>> {
+    const ec2 = new EC2({ region: this.config.region });
+    const maxAsgPodSearchBatch = 5; // Limit imposed by AWS API
+
+    const instancesByPod: Record<string, EC2Instance[]> = {};
+    await inBatchesOf(pods, maxAsgPodSearchBatch, async (podNameBatch) => {
+      const result = await ec2.describeInstances({
+        Filters: [
+          {
+            Name: "tag:project",
+            Values: [this.config.project],
+          },
+          {
+            Name: "tag:pod",
+            Values: podNameBatch,
+          },
+          {
+            Name: "instance-state-name",
+            Values: ["running"],
+          },
+        ],
+      });
+
+      const instances =
+        result.Reservations?.flatMap(
+          (reservation) => reservation.Instances || []
+        ) || [];
+
+      for (const instance of instances) {
+        const instanceReleaseTag = instance.Tags?.findLast(
+          (tag) => tag.Key === "release"
+        )?.Value;
+        if (!instanceReleaseTag) {
+          // Shouldn't happen, but include for type safety
+          throw new Error(
+            `Instance ${instance.InstanceId} does not have a "release" tag with any value`
+          );
+        }
+        if (instanceReleaseTag === this.options.release) {
+          continue; // Skip instances that are running the latest release
+        }
+
+        const instancePodTag = instance.Tags?.findLast(
+          (tag) => tag.Key === "pod"
+        )?.Value;
+        if (!instancePodTag) {
+          // Shouldn't happen, but include for type safety
+          throw new Error(
+            `Instance ${instance.InstanceId} does not have a "pod" tag with any value`
+          );
+        }
+
+        instancesByPod[instancePodTag] ||= [];
+        instancesByPod[instancePodTag].push(instance);
+      }
+    });
+
+    return instancesByPod;
+  }
+
   private async alreadyRunningInstances(pods: string[]) {
     const ec2 = new EC2({ region: this.config.region });
     const result = await ec2.describeInstances({
@@ -1153,8 +1840,35 @@ export class App {
     // This has the added benefit of speeding up the deploy for large applications when only a single
     // pod was modified.
     for (const [podName, podOptions] of Object.entries(this.config.pods)) {
+      let currentAsg = undefined;
+      if (
+        podOptions.deploy.replaceWith === "new-instances" &&
+        podOptions.deploy.orchestrator === "consul"
+      ) {
+        // Use the previously existing ASG's min/max/desired capacity
+        const asgClient = new AutoScaling({ region: this.config.region });
+        const asgResult = await asgClient.describeAutoScalingGroups({
+          Filters: [
+            {
+              Name: "tag:project",
+              Values: [this.config.project],
+            },
+            {
+              Name: "tag:pod",
+              Values: [podName],
+            },
+          ],
+        });
+        const asg = asgResult.AutoScalingGroups?.[0];
+        currentAsg = {
+          minSize: asg?.MinSize ?? 1,
+          maxSize: asg?.MaxSize ?? 2,
+          desiredCapacity: asg?.DesiredCapacity ?? 1,
+        };
+      }
+
       new PodStack(app, `${this.config.project}-pod-${podName}`, {
-        releaseId: this.options.release.toString(),
+        releaseId: this.options.release as string,
         project: this.config.project,
         shortName: podName,
         region: this.config.region,
@@ -1168,6 +1882,7 @@ export class App {
         privateSubnets: this.config.network?.subnets?.private,
         secretMappings: this.allowedPodSecrets(podName),
         podOptions,
+        currentAsg,
       });
     }
     app.synth();
