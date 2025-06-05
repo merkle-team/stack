@@ -506,8 +506,11 @@ export class App {
       );
     }
 
-    const minSize = currentAsg?.MinSize ?? 1;
-    const maxSize = currentAsg?.MaxSize ?? 2;
+    const minSize =
+      currentAsg?.MinSize ?? podConfig.autoscaling?.minHealthyInstances ?? 1;
+    const maxSize =
+      currentAsg?.MaxSize ??
+      (podConfig.autoscaling?.minHealthyInstances ?? 1) + 1;
     const desiredCapacity = currentAsg?.DesiredCapacity ?? 1;
 
     const defaultSubnetIds = podConfig.singleton
@@ -619,10 +622,7 @@ export class App {
     // Get the last created ASG, since there might be multiple ASGs due to other/earlier deployments that haven't yet been cleaned up
     const oldAsgs = asgResult.AutoScalingGroups?.filter(
       (asg) =>
-        asg.Tags?.find((tag) => tag.Key === "release")?.Value !== releaseId &&
-        asg.AutoScalingGroupName?.endsWith(
-          "z"
-        ) /* Only delete ASGs with release ID in name (new type of ASG) */
+        asg.Tags?.find((tag) => tag.Key === "release")?.Value !== releaseId
     );
     if (oldAsgs?.length) {
       const results = await Promise.allSettled(
