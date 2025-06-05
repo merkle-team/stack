@@ -217,11 +217,18 @@ export class App {
     const waitInstanceRefreshesExitStatus = await this.waitForInstanceRefreshes(
       podNames
     );
+    if (waitInstanceRefreshesExitStatus !== 0) {
+      return waitInstanceRefreshesExitStatus;
+    }
+
     // If there are Consul-based pods, wait for their health checks to pass.
     // This ensures it is safe for us to remove the old instances from load balancers etc
     // If there are none, this will return quickly.
     const waitConsulServiceHealthExitStatus =
       await this.waitForConsulServiceHealthChecks(podNames, release);
+    if (waitConsulServiceHealthExitStatus !== 0) {
+      return waitConsulServiceHealthExitStatus;
+    }
 
     // Only perform a swap if there are already running instances.
     if (!this.options.applyOnly && alreadyRunningInstances.length) {
@@ -259,16 +266,10 @@ export class App {
       }
     }
 
-    // If deploy is still appearing healthy, clean up old ASGs
-    if (
-      waitInstanceRefreshesExitStatus === 0 &&
-      waitConsulServiceHealthExitStatus === 0
-    ) {
-      const deleteAsgsExitStatus = await this.deleteAsgs(podNames);
-      if (deleteAsgsExitStatus !== 0) {
-        console.error("Failed to clean up one or more old ASGs");
-        return deleteAsgsExitStatus;
-      }
+    const deleteAsgsExitStatus = await this.deleteAsgs(podNames);
+    if (deleteAsgsExitStatus !== 0) {
+      console.error("Failed to clean up one or more old ASGs");
+      return deleteAsgsExitStatus;
     }
 
     // Return whichever exit status is non-zero, otherwise it'll return 0.
