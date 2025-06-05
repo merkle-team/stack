@@ -511,7 +511,7 @@ export class App {
     const maxSize =
       currentAsg?.MaxSize ??
       (podConfig.autoscaling?.minHealthyInstances ?? 1) + 1;
-    const desiredCapacity = currentAsg?.DesiredCapacity ?? 1;
+    const desiredCapacity = currentAsg?.DesiredCapacity ?? minSize;
 
     const defaultSubnetIds = podConfig.singleton
       ? undefined
