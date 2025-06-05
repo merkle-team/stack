@@ -817,7 +817,10 @@ export class App {
         },
       ],
     });
-    const asg: AutoScalingGroup | undefined = asgsResult.AutoScalingGroups?.[0];
+    const asg = asgsResult.AutoScalingGroups?.sort(
+      (a, b) =>
+        (b.CreatedTime?.getTime() ?? 0) - (a.CreatedTime?.getTime() ?? 0)
+    )?.[0];
     return (
       asg?.DesiredCapacity ??
       this.config.pods[podName].autoscaling?.minHealthyInstances ??
@@ -1864,7 +1867,10 @@ export class App {
             },
           ],
         });
-        const asg = asgResult.AutoScalingGroups?.[0];
+        const asg = asgResult.AutoScalingGroups?.sort(
+          (a, b) =>
+            (b.CreatedTime?.getTime() ?? 0) - (a.CreatedTime?.getTime() ?? 0)
+        )[0];
         currentAsg = {
           minSize: asg?.MinSize ?? 1,
           maxSize: asg?.MaxSize ?? 2,
