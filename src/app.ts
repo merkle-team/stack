@@ -36,6 +36,10 @@ export class App {
     private readonly options: Record<string, string | boolean>
   ) {
     this.options = JSON.parse(JSON.stringify(options));
+    // Ensure subprocesses have the same release ID
+    if (this.options.release) {
+      process.env["RELEASE_ID"] = this.options.release as string;
+    }
     this.config = parseConfig(this.options.config as string);
     this.createCdktfJson();
   }

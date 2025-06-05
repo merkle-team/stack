@@ -7,17 +7,16 @@ const CLI_PATH = import.meta.path;
 function generateReleaseId() {
   // Store the release ID in an environment variable so that we can pass to subprocesses,
   // reusing any previously defined one if provided.
-  process.env["RELEASE_ID"] =
+  return (
     process.env["RELEASE_ID"] ||
     `${new Date()
       .toISOString()
       .replace(/\:/g, "-")
       .replace(/\./g, "-")
-      .replace("Z", "z")}`;
-
-  return process.env["RELEASE_ID"];
+      .replace("Z", "z")}`
+  );
 }
-const RELEASE_ID = generateReleaseId();
+const DEFAULT_RELEASE_ID = generateReleaseId();
 
 const program = new Command();
 
@@ -50,7 +49,7 @@ program
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    RELEASE_ID
+    DEFAULT_RELEASE_ID
   )
   .action(async (stacks, options) => {
     const app = new App(CLI_PATH, { ...program.opts(), ...options });
@@ -63,7 +62,7 @@ program
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    RELEASE_ID
+    DEFAULT_RELEASE_ID
   )
   .action(async (options) => {
     const app = new App(CLI_PATH, { ...program.opts(), ...options });
@@ -81,7 +80,7 @@ program
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    RELEASE_ID
+    DEFAULT_RELEASE_ID
   )
   .option(
     "--skip-apply",
@@ -105,7 +104,7 @@ program
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    RELEASE_ID
+    DEFAULT_RELEASE_ID
   )
   .action(async (stacks, options) => {
     const app = new App(CLI_PATH, { ...program.opts(), ...options });
@@ -131,7 +130,7 @@ program
   .option(
     "-r, --release <releaseId>",
     "Name to use for the release (defaults to a timestamp)",
-    RELEASE_ID
+    DEFAULT_RELEASE_ID
   )
   .action(async (options) => {
     const app = new App(CLI_PATH, { ...program.opts(), ...options });
