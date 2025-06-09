@@ -44,6 +44,8 @@ if [ ! -d /home/${sshUser}/releases/${releaseId} ]; then
   echo "PROJECT=${namespace}" >> .static.env
   echo "RELEASE=${releaseId}" >> .static.env
   echo "POD_NAME=${pod}" >> .static.env
+  REGION=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r .region)
+  echo "REGION=\$REGION" >> .static.env
   INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
   echo "INSTANCE_ID=\$INSTANCE_ID" >> .static.env
   echo "\$INSTANCE_ID" | sudo tee /etc/instance-id > /dev/null
@@ -113,7 +115,7 @@ if [ ! -d /home/${sshUser}/releases/${releaseId} ]; then
     # Avoid weird errors on first boot; see https://github.com/moby/moby/issues/22074#issuecomment-856551466
     sudo systemctl restart docker
 
-    docker compose up --detach --quiet-pull --pull=missing
+    COMPOSE_PROFILES="${pod}" docker compose up --detach --quiet-pull --pull=missing
     echo "Finished starting Docker containers $(cat /proc/uptime | awk '{ print $1 }') seconds after boot"
     echo "$new_release_dir" > /home/${sshUser}/releases/current
   fi
