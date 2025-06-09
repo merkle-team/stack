@@ -622,7 +622,10 @@ export class App {
     // Get the last created ASG, since there might be multiple ASGs due to other/earlier deployments that haven't yet been cleaned up
     const oldAsgs = asgResult.AutoScalingGroups?.filter(
       (asg) =>
-        asg.Tags?.find((tag) => tag.Key === "release")?.Value !== releaseId
+        asg.Tags?.find((tag) => tag.Key === "release")?.Value !== releaseId &&
+        asg.AutoScalingGroupName?.includes(
+          "Z" // Terraform-based ASGs don't have "Z" from a timestamp in their name
+        ) /* Only delete ASGs with release ID in name (new type of ASG) */
     );
     if (oldAsgs?.length) {
       const results = await Promise.allSettled(
@@ -1435,7 +1438,7 @@ export class App {
 
     # Start up all pod containers
     echo "Starting new containers for pod ${podName} on ${instanceId} ${ip} for release ${releaseId}"
-    docker compose up --detach --quiet-pull --pull=missing
+    COMPOSE_PROFILES="${podName}" docker compose up --detach --quiet-pull --pull=missing
 
     # Delete old images + containers
     docker system prune --force
