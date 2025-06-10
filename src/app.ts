@@ -625,16 +625,15 @@ export class App {
       ],
     });
     // Get the last created ASG, since there might be multiple ASGs due to other/earlier deployments that haven't yet been cleaned up
-    const oldAsgs = asgResult.AutoScalingGroups?.filter(
-      (asg) =>
-        (newRelease
-          ? asg.Tags?.find((tag) => tag.Key === "release")?.Value === releaseId
-          : asg.Tags?.find((tag) => tag.Key !== "release")?.Value !==
-            releaseId) &&
-        asg.AutoScalingGroupName?.match(
-          /z/i
-        ) /* Only delete ASGs with release ID in name (new type of ASG), which contains timestamp with "Z"/"z" */
-    );
+    const oldAsgs = newRelease
+      ? asgResult.AutoScalingGroups?.filter(
+          (asg) =>
+            asg.Tags?.find((tag) => tag.Key === "release")?.Value === releaseId
+        )
+      : asgResult.AutoScalingGroups?.filter(
+          (asg) =>
+            asg.Tags?.find((tag) => tag.Key === "release")?.Value !== releaseId
+        );
     if (oldAsgs?.length) {
       const results = await Promise.allSettled(
         oldAsgs?.map(async (asg) => {
