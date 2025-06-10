@@ -218,6 +218,7 @@ export class App {
       podNames
     );
     if (waitInstanceRefreshesExitStatus !== 0) {
+      await this.deleteAsgs(podNames, true); // Clean up new deploy on failure
       return waitInstanceRefreshesExitStatus;
     }
 
@@ -227,6 +228,7 @@ export class App {
     const waitConsulServiceHealthExitStatus =
       await this.waitForConsulServiceHealthChecks(podNames, release);
     if (waitConsulServiceHealthExitStatus !== 0) {
+      await this.deleteAsgs(podNames, true); // Clean up new deploy on failure
       return waitConsulServiceHealthExitStatus;
     }
 
@@ -250,7 +252,7 @@ export class App {
           console.error(
             "Failed to run pre-terminate script for one or more pods"
           );
-          return preTerminateScriptExitStatus;
+          // Continue with swap even if pre-terminate script fails, since it's optional
         }
 
         const swapStatus = await this.swapContainers(
@@ -584,14 +586,17 @@ export class App {
     console.log(`Created ASG ${asgName} for pod ${podName}`);
   }
 
-  private async deleteAsgs(podNames: string[]): Promise<ExitStatus> {
+  private async deleteAsgs(
+    podNames: string[],
+    newRelease?: boolean
+  ): Promise<ExitStatus> {
     const deleteAsgPromises = podNames
       .filter(
         (podName) =>
           this.config.pods[podName].deploy.replaceWith === "new-instances" &&
           this.config.pods[podName].deploy.orchestrator === "consul"
       )
-      .map((podName) => this.deleteAsg(podName));
+      .map((podName) => this.deleteAsg(podName, newRelease));
     const results = await Promise.allSettled(deleteAsgPromises);
     let deleteAsgFailed = false;
     for (const result of results) {
@@ -603,7 +608,7 @@ export class App {
     return deleteAsgFailed ? 1 : 0;
   }
 
-  private async deleteAsg(podName: string) {
+  private async deleteAsg(podName: string, newRelease?: boolean) {
     const releaseId = this.options.release as string;
     const asgClient = new AutoScaling({ region: this.config.region });
 
@@ -622,7 +627,10 @@ export class App {
     // Get the last created ASG, since there might be multiple ASGs due to other/earlier deployments that haven't yet been cleaned up
     const oldAsgs = asgResult.AutoScalingGroups?.filter(
       (asg) =>
-        asg.Tags?.find((tag) => tag.Key === "release")?.Value !== releaseId &&
+        (newRelease
+          ? asg.Tags?.find((tag) => tag.Key === "release")?.Value === releaseId
+          : asg.Tags?.find((tag) => tag.Key !== "release")?.Value ==
+            releaseId) &&
         asg.AutoScalingGroupName?.match(
           /z/i
         ) /* Only delete ASGs with release ID in name (new type of ASG), which contains timestamp with "Z"/"z" */
