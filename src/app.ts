@@ -623,9 +623,9 @@ export class App {
     const oldAsgs = asgResult.AutoScalingGroups?.filter(
       (asg) =>
         asg.Tags?.find((tag) => tag.Key === "release")?.Value !== releaseId &&
-        asg.AutoScalingGroupName?.includes(
-          "Z" // Terraform-based ASGs don't have "Z" from a timestamp in their name
-        ) /* Only delete ASGs with release ID in name (new type of ASG) */
+        asg.AutoScalingGroupName?.match(
+          /z/i
+        ) /* Only delete ASGs with release ID in name (new type of ASG), which contains timestamp with "Z"/"z" */
     );
     if (oldAsgs?.length) {
       const results = await Promise.allSettled(
