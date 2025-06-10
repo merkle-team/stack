@@ -1,6 +1,6 @@
 # TERRAFORM
 
-FROM hashicorp/terraform:1.10.2 AS terraform
+FROM hashicorp/terraform:1.12.1 AS terraform
 
 ## BASE ########################################################################
 
