@@ -629,7 +629,7 @@ export class App {
       (asg) =>
         (newRelease
           ? asg.Tags?.find((tag) => tag.Key === "release")?.Value === releaseId
-          : asg.Tags?.find((tag) => tag.Key !== "release")?.Value ==
+          : asg.Tags?.find((tag) => tag.Key !== "release")?.Value !==
             releaseId) &&
         asg.AutoScalingGroupName?.match(
           /z/i
