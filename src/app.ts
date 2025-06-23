@@ -501,6 +501,10 @@ export class App {
     const currentAsg = asgResult.AutoScalingGroups?.sort(
       (a, b) =>
         (b.CreatedTime?.getTime() ?? 0) - (a.CreatedTime?.getTime() ?? 0)
+    ).filter(
+      (asg) =>
+        asg.Status ===
+        undefined /* Ignore ASGs in the process of being deleted */
     )[0];
     if (!currentAsg) {
       console.log(
