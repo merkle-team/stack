@@ -643,11 +643,17 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
 
       if (!replaceAsgEachDeploy || podOptions.deploy._preserveAsg) {
         let minSize = Math.max(1, podOptions.autoscaling.minHealthyInstances);
-        let maxSize = 2;
+        let maxSize = Math.max(
+          2,
+          minSize,
+          Math.ceil(
+            minSize * (podOptions.autoscaling.minHealthyPercentage / 100)
+          )
+        );
         let desiredCapacity = Math.max(1, minSize);
         if (options.currentAsg) {
           minSize = options.currentAsg.minSize ?? 1;
-          maxSize = options.currentAsg.maxSize ?? 2;
+          maxSize = options.currentAsg.maxSize ?? maxSize;
           desiredCapacity = options.currentAsg.desiredCapacity ?? 1;
         }
 
