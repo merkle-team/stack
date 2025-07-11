@@ -26,7 +26,7 @@ fi
 
 if [ "$1" = "update" ]; then
   echo "Updating Stack to latest version..."
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/warpcast/stack/refs/heads/main/install.sh)"
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/merkle-team/stack/refs/heads/main/install.sh)"
   echo "Stack now on version:"
   exec stack --version
 fi
@@ -53,7 +53,7 @@ if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
     -e "CI=$CI" \
     -v "${SSH_AUTH_SOCK:-/ssh-agent}:/ssh-agent" \
     -e SSH_AUTH_SOCK=/ssh-agent \
-    warpcast/stack:$STACK_VERSION "$@"
+    merklemanufactory/stack:$STACK_VERSION "$@"
 else
   # Otherwise explicitly forward AWS auth envars
   exec docker run --rm $interactive_flags \
@@ -63,7 +63,7 @@ else
     -e "CI=$CI" \
     -v "${SSH_AUTH_SOCK:-/ssh-agent}:/ssh-agent" \
     -e SSH_AUTH_SOCK=/ssh-agent \
-    warpcast/stack:$STACK_VERSION "$@"
+    merklemanufactory/stack:$STACK_VERSION "$@"
 fi
 
 # Build process will append the version tag to this file so it can be used

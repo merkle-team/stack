@@ -5,7 +5,7 @@
 #
 # You can run it anywhere by executing:
 #
-# /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/warpcast/stack/refs/heads/main/install.sh)"
+# /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/merkle-team/stack/refs/heads/main/install.sh)"
 
 set -euo pipefail
 
@@ -54,7 +54,7 @@ if ! chmod +x $location; then
   sudo chmod +x $location
 fi
 
-download_url=$(curl -s https://api.github.com/repos/warpcast/stack/releases/latest | jq -r ".assets[] | select(.name  == \"stack\") | .browser_download_url")
+download_url=$(curl -s https://api.github.com/repos/merkle-team/stack/releases/latest | jq -r ".assets[] | select(.name  == \"stack\") | .browser_download_url")
 if [ -z "$download_url" ]; then
   echo "Could not find download URL for latest version of Stack"
   exit 1
