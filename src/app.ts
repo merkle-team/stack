@@ -931,7 +931,7 @@ export class App {
             }
 
             console.log(
-              `Waiting for pod ${podName} Consul sevice [${serviceName}] health checks: ${healthCheckData.length} / ${desiredInstanceCount}`
+              `Waiting for pod ${podName} Consul service [${serviceName}] health checks: ${healthCheckData.length} / ${desiredInstanceCount}`
             );
           } else {
             throw new Error(
