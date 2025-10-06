@@ -88,7 +88,9 @@ export class PodStack extends TerraformStack {
           `Load balancer ${lbName} for pod ${fullPodName} has an idle-timeout specified, but is not an application load balancer`
         );
       }
-      const uniqueLbName = `${options.project}-pod-${options.shortName}-${lbName}`;
+      const uniqueLbName =
+        lbOptions.awsName ||
+        `${options.project}-pod-${options.shortName}-${lbName}`;
 
       const lbSg = new SmartSecurityGroup(this, `lb-ssg-${uniqueLbName}`, {
         project: options.project,
