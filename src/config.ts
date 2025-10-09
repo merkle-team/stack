@@ -153,6 +153,7 @@ export const DeployConfigSchema = Type.Object({
         Type.Record(
           Type.String(),
           Type.Object({
+            awsName: Type.Optional(Type.String()),
             loadBalancer: Type.Optional(
               Type.Object({
                 name: Type.String(),

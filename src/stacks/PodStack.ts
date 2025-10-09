@@ -389,7 +389,7 @@ export class PodStack extends TerraformStack {
       if (!endpointOptions.loadBalancer) continue;
 
       const tg = new LbTargetGroup(this, `${fullPodName}-${endpointName}`, {
-        name: `${fullPodName}-${endpointName}`,
+        name: endpointOptions.awsName || `${fullPodName}-${endpointName}`,
         port: endpointOptions.target.port,
         protocol: endpointOptions.target.protocol,
         vpcId: options.vpcId,
