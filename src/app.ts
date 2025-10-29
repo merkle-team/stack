@@ -14,6 +14,7 @@ import {
   AutoScalingGroup,
   LifecycleState,
 } from "@aws-sdk/client-auto-scaling";
+import { ConfiguredRetryStrategy } from "@aws-sdk/util-retry";
 import { DynamoDB } from "@aws-sdk/client-dynamodb";
 import { PodStack } from "./stacks/PodStack";
 import { execa } from "execa";
@@ -42,6 +43,50 @@ export class App {
     }
     this.config = parseConfig(this.options.config as string);
     this.createCdktfJson();
+  }
+
+  private createRetryStrategy(serviceName: string): ConfiguredRetryStrategy {
+    const maxAttempts = process.env.AWS_MAX_ATTEMPTS
+      ? parseInt(process.env.AWS_MAX_ATTEMPTS, 10)
+      : 5;
+
+    return new ConfiguredRetryStrategy(maxAttempts, (attempt: number) => {
+      const delayMs = 300 * 2 ** attempt;
+      if (attempt > 0) {
+        console.warn(
+          `[WARN] AWS ${serviceName} throttling detected - retrying (attempt ${attempt}/${maxAttempts}, waiting ${delayMs}ms)`
+        );
+      }
+      return delayMs;
+    });
+  }
+
+  private createAutoScalingClient(): AutoScaling {
+    return new AutoScaling({
+      region: this.config.region,
+      retryStrategy: this.createRetryStrategy("AutoScaling"),
+    });
+  }
+
+  private createEC2Client(): EC2 {
+    return new EC2({
+      region: this.config.region,
+      retryStrategy: this.createRetryStrategy("EC2"),
+    });
+  }
+
+  private createDynamoDBClient(): DynamoDB {
+    return new DynamoDB({
+      region: this.config.region,
+      retryStrategy: this.createRetryStrategy("DynamoDB"),
+    });
+  }
+
+  private createSecretsManagerClient(): SecretsManager {
+    return new SecretsManager({
+      region: this.config.region,
+      retryStrategy: this.createRetryStrategy("SecretsManager"),
+    });
   }
 
   public async synth(
@@ -348,7 +393,7 @@ export class App {
       return;
     }
 
-    const asgClient = new AutoScaling({ region: this.config.region });
+    const asgClient = this.createAutoScalingClient();
 
     // If pod is part of ASG, check desired capacity before proceeding
     if (podConfig.autoscaling) {
@@ -462,8 +507,8 @@ export class App {
     const releaseId = this.options.release as string;
     const fullPodName = `${this.config.project}-${podName}`;
 
-    const asgClient = new AutoScaling({ region: this.config.region });
-    const ec2Client = new EC2({ region: this.config.region });
+    const asgClient = this.createAutoScalingClient();
+    const ec2Client = this.createEC2Client();
 
     const launchTemplatesResult = await ec2Client.describeLaunchTemplates({
       Filters: [
@@ -614,7 +659,7 @@ export class App {
 
   private async deleteAsg(podName: string, newRelease?: boolean) {
     const releaseId = this.options.release as string;
-    const asgClient = new AutoScaling({ region: this.config.region });
+    const asgClient = this.createAutoScalingClient();
 
     const asgResult = await asgClient.describeAutoScalingGroups({
       Filters: [
@@ -701,7 +746,7 @@ export class App {
     asgName: string,
     podName: string
   ) {
-    const asg = new AutoScaling({ region: this.config.region });
+    const asg = this.createAutoScalingClient();
     const refreshes =
       (
         await asg.describeInstanceRefreshes({
@@ -729,7 +774,7 @@ export class App {
   }
 
   private async relevantAutoScalingGroupsForRollback(podNames: string[]) {
-    const asg = new AutoScaling({ region: this.config.region });
+    const asg = this.createAutoScalingClient();
 
     // Fetch all ASGs for the pods we're deploying in chunks to avoid AWS limits
     const asgs: AutoScalingGroup[] = [];
@@ -771,7 +816,7 @@ export class App {
   }
 
   private async relevantAutoScalingGroups(podNames: string[]) {
-    const asg = new AutoScaling({ region: this.config.region });
+    const asg = this.createAutoScalingClient();
 
     // Fetch all ASGs for the pods we're deploying in chunks to avoid AWS limits
     const asgs: AutoScalingGroup[] = [];
@@ -862,7 +907,7 @@ export class App {
         .join(", ")}...`
     );
 
-    const ec2Client = new EC2({ region: this.config.region });
+    const ec2Client = this.createEC2Client();
     const instancesResult = await ec2Client.describeInstances({
       Filters: [
         {
@@ -886,7 +931,7 @@ export class App {
     const serviceTag = releaseId;
 
     const startTime = Date.now();
-    const asgClient = new AutoScaling({ region: this.config.region });
+    const asgClient = this.createAutoScalingClient();
     const results = await Promise.allSettled(
       relevantPodsWithConsulHealthChecks.map(async ([podName, podConfig]) => {
         const serviceName = podConfig.deploy.healthCheckService;
@@ -1036,7 +1081,7 @@ export class App {
     return Promise.race([
       timeoutPromise,
       (async () => {
-        const asg = new AutoScaling({ region: this.config.region });
+        const asg = this.createAutoScalingClient();
         const refreshes =
           (
             await asg.describeInstanceRefreshes({
@@ -1115,8 +1160,8 @@ export class App {
     alreadyRunningInstances: EC2Instance[],
     podsToDeploy: string[]
   ): Promise<ExitStatus> {
-    const ec2 = new EC2({ region: this.config.region });
-    const asg = new AutoScaling({ region: this.config.region });
+    const ec2 = this.createEC2Client();
+    const asg = this.createAutoScalingClient();
     const instancesForPod: Record<string, EC2Instance[]> = {};
 
     let updateFailed = false;
@@ -1582,7 +1627,7 @@ export class App {
 
     const failures: unknown[] = [];
     for (const stackId of stackIds) {
-      const dynamo = new DynamoDB({ region: this.config.region });
+      const dynamo = this.createDynamoDBClient();
       try {
         await dynamo.deleteItem({
           TableName: "warpcast-terraform-locks",
@@ -1622,7 +1667,7 @@ export class App {
       return 1;
     }
 
-    const ec2 = new EC2({ region: this.config.region });
+    const ec2 = this.createEC2Client();
     const result = await ec2.describeInstances({
       Filters: [
         {
@@ -1712,7 +1757,7 @@ export class App {
   private async alreadyRunningInstancesByPod(
     pods: string[]
   ): Promise<Record<string, EC2Instance[]>> {
-    const ec2 = new EC2({ region: this.config.region });
+    const ec2 = this.createEC2Client();
     const maxAsgPodSearchBatch = 5; // Limit imposed by AWS API
 
     const instancesByPod: Record<string, EC2Instance[]> = {};
@@ -1772,7 +1817,7 @@ export class App {
   }
 
   private async alreadyRunningInstances(pods: string[]) {
-    const ec2 = new EC2({ region: this.config.region });
+    const ec2 = this.createEC2Client();
     const result = await ec2.describeInstances({
       Filters: [
         {
@@ -1820,7 +1865,7 @@ export class App {
   public async _synth() {
     const app = new CdkApp();
 
-    const secretsClient = new SecretsManager({ region: this.config.region });
+    const secretsClient = this.createSecretsManagerClient();
     let secrets: SecretListEntry[] = [];
     let nextToken;
     for (;;) {
@@ -1868,7 +1913,7 @@ export class App {
         podOptions.deploy.orchestrator === "consul"
       ) {
         // Use the previously existing ASG's min/max/desired capacity
-        const asgClient = new AutoScaling({ region: this.config.region });
+        const asgClient = this.createAutoScalingClient();
         const asgResult = await asgClient.describeAutoScalingGroups({
           Filters: [
             {
