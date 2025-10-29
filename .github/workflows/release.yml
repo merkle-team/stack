@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   publish-docker-images:
-    timeout-minutes: 10
+    timeout-minutes: 20 # Sometimes build takes a while
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
