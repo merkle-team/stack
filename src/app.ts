@@ -8,6 +8,7 @@ import {
   sleep,
   generateDeployScript,
   objectEntries,
+  withTimeout,
 } from "./util";
 import {
   AutoScaling,
@@ -271,47 +272,47 @@ export class App {
     // This ensures it is safe for us to remove the old instances from load balancers etc
     // If there are none, this will return quickly.
     const waitConsulServiceHealthExitStatus =
-      await this.waitForConsulServiceHealthChecks(podNames, release);
-    if (waitConsulServiceHealthExitStatus !== 0) {
-      await this.deleteAsgs(podNames, true); // Clean up new deploy on failure
-      return waitConsulServiceHealthExitStatus;
-    }
+      await this.waitForConsulServiceHealthChecks(
+        podNames,
+        release,
+        async (podName) => {
+          // Only perform a swap if there are already running instances.
+          if (!this.options.applyOnly && alreadyRunningInstances.length) {
+            // It's possible the above apply command removed instances, so need to check again
+            const currentlyRunningInstances =
+              await this.alreadyRunningInstances([podName]);
 
-    // Only perform a swap if there are already running instances.
-    if (!this.options.applyOnly && alreadyRunningInstances.length) {
-      // It's possible the above apply command removed instances, so need to check again
-      const currentlyRunningInstances = await this.alreadyRunningInstances(
-        podNames
+            if (currentlyRunningInstances.length) {
+              const currentlyRunningInstancesByPod =
+                await this.alreadyRunningInstancesByPod([podName]);
+              // Run the pre-terminate script for each pod
+              const preTerminateScriptExitStatus =
+                await this.runPreContainerShutdownScripts(
+                  [podName],
+                  currentlyRunningInstancesByPod
+                );
+              if (preTerminateScriptExitStatus !== 0) {
+                console.error(
+                  "Failed to run pre-terminate script for one or more pods"
+                );
+                // Continue with swap even if pre-terminate script fails, since it's optional
+              }
+
+              const swapStatus = await this.swapContainers(
+                release,
+                currentlyRunningInstancesByPod[podName],
+                [podName]
+              );
+              if (swapStatus !== 0) {
+                // No need to wait for instance refreshes since we know the deploy is a failure
+                // TODO: Cancel existing instance refreshes?
+                return swapStatus;
+              }
+            }
+          }
+          return 0;
+        }
       );
-
-      if (currentlyRunningInstances.length) {
-        const currentlyRunningInstancesByPod =
-          await this.alreadyRunningInstancesByPod(podNames);
-        // Run the pre-terminate script for each pod
-        const preTerminateScriptExitStatus =
-          await this.runPreContainerShutdownScripts(
-            podNames,
-            currentlyRunningInstancesByPod
-          );
-        if (preTerminateScriptExitStatus !== 0) {
-          console.error(
-            "Failed to run pre-terminate script for one or more pods"
-          );
-          // Continue with swap even if pre-terminate script fails, since it's optional
-        }
-
-        const swapStatus = await this.swapContainers(
-          release,
-          currentlyRunningInstances,
-          podNames
-        );
-        if (swapStatus !== 0) {
-          // No need to wait for instance refreshes since we know the deploy is a failure
-          // TODO: Cancel existing instance refreshes?
-          return swapStatus;
-        }
-      }
-    }
 
     const deleteAsgsExitStatus = await this.deleteAsgs(podNames);
     if (deleteAsgsExitStatus !== 0) {
@@ -360,9 +361,15 @@ export class App {
           return;
         }
 
-        await this.runPreContainerShutdownScript(
-          podName,
-          currentlyRunningPodInstances
+        await withTimeout(
+          this.runPreContainerShutdownScript(
+            podName,
+            currentlyRunningPodInstances
+          ),
+          60000, // 1 minute timeout
+          new Error(
+            `Timeout running pre-container-shutdown script for pod ${podName} after 60 seconds`
+          )
         );
       });
 
@@ -442,10 +449,16 @@ export class App {
               );
             }
 
+            console.log(
+              `Running pre-container-shutdown script for pod ${podName} on instance ${instance.InstanceId} ${ip}...`
+            );
             const connectResult =
               await $`aws-ec2-ssh -T -F/dev/null -oLogLevel=ERROR -oBatchMode=yes -oStrictHostKeyChecking=no ${sshUser}@${ip} bash -s < ${new Response(
                 podConfig.preContainerShutdownScript
               )}`;
+            console.log(
+              `Completed pre-container-shutdown script for pod ${podName} on instance ${instance.InstanceId} ${ip}...`
+            );
             if (connectResult.exitCode !== 0) {
               console.error(
                 "STDOUT",
@@ -889,7 +902,8 @@ export class App {
 
   private async waitForConsulServiceHealthChecks(
     podNames: string[],
-    releaseId: string
+    releaseId: string,
+    onSuccess: (podName: string) => Promise<ExitStatus>
   ): Promise<ExitStatus> {
     const relevantPodsWithConsulHealthChecks = Object.entries(
       this.config.pods
@@ -958,39 +972,49 @@ export class App {
           const healthCheckResult = await fetch(healthCheckUrl.toString());
           delete process.env["NODE_TLS_REJECT_UNAUTHORIZED"];
           if (!healthCheckResult.ok) {
-            throw new Error(
+            console.error(
               `Failed to check health of ${serviceName} service: ${healthCheckResult.status} - ${healthCheckResult.statusText}`
             );
-          }
-          const healthCheckData = await healthCheckResult.json();
-          if (Array.isArray(healthCheckData)) {
-            // We re-check desired instance count since it may have changed manually in the AWS console since the deploy started
-            const desiredInstanceCount =
-              await this.getDesiredInstanceCountForPod(asgClient, podName);
-
-            if (healthCheckData.length >= desiredInstanceCount) {
-              console.log(
-                `Pod ${podName} Consul service [${serviceName}] health checks passed`
-              );
-              return;
-            }
-
-            console.log(
-              `Waiting for pod ${podName} Consul service [${serviceName}] health checks: ${healthCheckData.length} / ${desiredInstanceCount}`
-            );
+            // Fall through to try again. If this keeps failing, deploy will eventually time out.
+            // What we don't want is to fail the deploy immediately in case this was a transient issue.
           } else {
-            throw new Error(
-              `Unexpected Consul service health check response: ${JSON.stringify(
-                healthCheckData
-              )}`
-            );
+            const healthCheckData = await healthCheckResult.json();
+            if (Array.isArray(healthCheckData)) {
+              // We re-check desired instance count since it may have changed manually in the AWS console since the deploy started
+              const desiredInstanceCount =
+                await this.getDesiredInstanceCountForPod(asgClient, podName);
+
+              if (healthCheckData.length >= desiredInstanceCount) {
+                console.log(
+                  `Pod ${podName} Consul service [${serviceName}] health checks passed`
+                );
+                await onSuccess(podName); // Make sure we call pre-shutdown hooks BEFORE deleting the old ASG
+                await this.deleteAsgs([podName]); // Immediately clean up the old ASG to reduce open connections to the backend
+                return;
+              }
+
+              console.log(
+                `Waiting for pod ${podName} Consul service [${serviceName}] health checks: ${healthCheckData.length} / ${desiredInstanceCount}`
+              );
+            } else {
+              throw new Error(
+                `Unexpected Consul service health check response: ${JSON.stringify(
+                  healthCheckData
+                )}`
+              );
+            }
           }
 
           await sleep(5_000);
         }
 
+        console.error(
+          `Waiting for Consul service health checks for pod ${podName} timed out after ${deployTimeoutMs}ms. Tearing down new ASG`
+        );
+        await this.deleteAsgs([podName], true); // Clean up only the new ASG
+
         throw new Error(
-          `Waiting for Consul service health checks took longer than ${deployTimeoutMs}ms`
+          `Waiting for Consul service health checks for pod ${podName} took longer than ${deployTimeoutMs}ms`
         );
       })
     );
