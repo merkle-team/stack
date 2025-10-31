@@ -164,9 +164,25 @@ export class App {
     const stackIds = stacks.length
       ? this.normalizeStackIds(stacks)
       : this.getAllStackIds();
-    const podNames = this.extractPodNames(stackIds);
+    const referencedPodNames = this.extractPodNames(stackIds);
 
-    console.info("Deploying stacks:", stackIds);
+    const includedPodNames = referencedPodNames.filter(
+      (podName) => !podName.startsWith("-")
+    );
+    const excludedPodNames = referencedPodNames
+      .filter((podName) => podName.startsWith("-"))
+      .map((podName) => podName.slice(1));
+
+    let podNames = includedPodNames;
+    if (excludedPodNames.length > 0 && includedPodNames.length > 0) {
+      throw new Error("Cannot specify both included and excluded pods");
+    } else if (excludedPodNames.length > 0) {
+      podNames = this.extractPodNames(this.getAllStackIds()).filter(
+        (podName) => !excludedPodNames.includes(podName)
+      );
+    }
+
+    console.info(`Deploying pods: ${podNames.join("\n")}`);
 
     const release = this.options.release as string;
 
