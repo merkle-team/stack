@@ -161,7 +161,7 @@ export class App {
       );
     }
 
-    const stackIds = stacks.length
+    let stackIds = stacks.length
       ? this.normalizeStackIds(stacks)
       : this.getAllStackIds();
     const referencedPodNames = this.extractPodNames(stackIds);
@@ -180,9 +180,10 @@ export class App {
       podNames = this.extractPodNames(this.getAllStackIds()).filter(
         (podName) => !excludedPodNames.includes(podName)
       );
+      stackIds = this.normalizeStackIds(podNames);
     }
 
-    console.info(`Deploying pods: ${podNames.join("\n")}`);
+    console.info(`Deploying pods:\n${podNames.join("\n")}`);
 
     const release = this.options.release as string;
 
