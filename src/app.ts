@@ -180,7 +180,9 @@ export class App {
       podNames = this.extractPodNames(this.getAllStackIds()).filter(
         (podName) => !excludedPodNames.includes(podName)
       );
-      stackIds = this.normalizeStackIds(podNames);
+      stackIds = this.normalizeStackIds(
+        podNames.map((podName) => `${this.config.project}-pod-${podName}`)
+      );
     }
 
     console.info(`Deploying pods:\n${podNames.join("\n")}`);
