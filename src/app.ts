@@ -290,10 +290,12 @@ export class App {
     // If there are Consul-based pods, wait for their health checks to pass.
     // This ensures it is safe for us to remove the old instances from load balancers etc
     // If there are none, this will return quickly.
+    const failedPods = new Set<string>();
     const waitConsulServiceHealthExitStatus =
       await this.waitForConsulServiceHealthChecks(
         podNames,
         release,
+        // Pod deploy success callback
         async (podName) => {
           // Only perform a swap if there are already running instances.
           if (!this.options.applyOnly && alreadyRunningInstances.length) {
@@ -330,10 +332,18 @@ export class App {
             }
           }
           return 0;
+        },
+        // Pod deploy failure callback
+        async (podName) => {
+          failedPods.add(podName);
+          return 1;
         }
       );
 
-    const deleteAsgsExitStatus = await this.deleteAsgs(podNames);
+    // Delete ASGs only for pods that deployed successfully
+    const deleteAsgsExitStatus = await this.deleteAsgs([
+      ...new Set(podNames).difference(failedPods),
+    ]);
     if (deleteAsgsExitStatus !== 0) {
       console.error("Failed to clean up one or more old ASGs");
       return deleteAsgsExitStatus;
@@ -922,7 +932,8 @@ export class App {
   private async waitForConsulServiceHealthChecks(
     podNames: string[],
     releaseId: string,
-    onSuccess: (podName: string) => Promise<ExitStatus>
+    onSuccess: (podName: string) => Promise<ExitStatus>,
+    onFailure: (podName: string) => Promise<ExitStatus>
   ): Promise<ExitStatus> {
     const relevantPodsWithConsulHealthChecks = Object.entries(
       this.config.pods
@@ -1031,6 +1042,7 @@ export class App {
           `Waiting for Consul service health checks for pod ${podName} timed out after ${deployTimeoutMs}ms. Tearing down new ASG`
         );
         await this.deleteAsgs([podName], true); // Clean up only the new ASG
+        await onFailure(podName);
 
         throw new Error(
           `Waiting for Consul service health checks for pod ${podName} took longer than ${deployTimeoutMs}ms`
