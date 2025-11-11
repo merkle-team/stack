@@ -24,6 +24,8 @@ import {
   SecretListEntry,
   SecretsManager,
 } from "@aws-sdk/client-secrets-manager";
+import { defaultProvider } from "@aws-sdk/credential-provider-node";
+import type { AwsCredentialIdentity, Provider } from "@aws-sdk/types";
 
 const MAX_RELEASES_TO_KEEP = 10;
 const TF_ENVARS = { TF_IN_AUTOMATION: "1" };
@@ -62,9 +64,72 @@ export class App {
     });
   }
 
+  private createCredentialsProvider(): Provider<AwsCredentialIdentity> {
+    const maxAttempts = process.env.AWS_MAX_ATTEMPTS
+      ? parseInt(process.env.AWS_MAX_ATTEMPTS, 10)
+      : 5;
+    const baseProvider = defaultProvider();
+
+    return async () => {
+      let lastError: Error | undefined;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          const credentials = await baseProvider();
+          if (attempt > 0) {
+            console.warn(
+              `[INFO] AWS credentials loaded successfully after ${attempt} ${
+                attempt === 1 ? "retry" : "retries"
+              }`
+            );
+          }
+          return credentials;
+        } catch (error: unknown) {
+          lastError = error as Error;
+          const errorName = (error as Error)?.name;
+
+          // Only retry on credential provider errors
+          if (
+            errorName === "CredentialsProviderError" ||
+            errorName === "ProviderError"
+          ) {
+            const delayMs = 300 * 2 ** attempt;
+
+            if (attempt < maxAttempts - 1) {
+              console.warn(
+                `[WARN] AWS credentials loading failed (attempt ${
+                  attempt + 1
+                }/${maxAttempts}): ${
+                  (error as Error).message
+                }. Retrying in ${delayMs}ms...`
+              );
+              await sleep(delayMs);
+            } else {
+              console.error(
+                `[ERROR] AWS credentials loading failed after ${maxAttempts} attempts: ${
+                  (error as Error).message
+                }`
+              );
+            }
+          } else {
+            // For non-credential errors, fail immediately
+            throw error;
+          }
+        }
+      }
+
+      // If we exhausted all retries, throw the last error
+      throw (
+        lastError ||
+        new Error("Failed to load AWS credentials after multiple attempts")
+      );
+    };
+  }
+
   private createAutoScalingClient(): AutoScaling {
     return new AutoScaling({
       region: this.config.region,
+      credentials: this.createCredentialsProvider(),
       retryStrategy: this.createRetryStrategy("AutoScaling"),
     });
   }
@@ -72,6 +137,7 @@ export class App {
   private createEC2Client(): EC2 {
     return new EC2({
       region: this.config.region,
+      credentials: this.createCredentialsProvider(),
       retryStrategy: this.createRetryStrategy("EC2"),
     });
   }
@@ -79,6 +145,7 @@ export class App {
   private createDynamoDBClient(): DynamoDB {
     return new DynamoDB({
       region: this.config.region,
+      credentials: this.createCredentialsProvider(),
       retryStrategy: this.createRetryStrategy("DynamoDB"),
     });
   }
@@ -86,6 +153,7 @@ export class App {
   private createSecretsManagerClient(): SecretsManager {
     return new SecretsManager({
       region: this.config.region,
+      credentials: this.createCredentialsProvider(),
       retryStrategy: this.createRetryStrategy("SecretsManager"),
     });
   }
