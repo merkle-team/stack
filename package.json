@@ -1,6 +1,6 @@
 {
   "name": "stack",
-  "version": "0.0.86",
+  "version": "0.0.87",
   "license": "None",
   "private": true,
   "type": "module",
@@ -14,11 +14,11 @@
     "fmt": "bunx prettier --write ."
   },
   "dependencies": {
-    "@aws-sdk/client-auto-scaling": "^3.825.0",
-    "@aws-sdk/client-dynamodb": "^3.825.0",
-    "@aws-sdk/client-ec2": "^3.825.0",
-    "@aws-sdk/client-elastic-load-balancing-v2": "^3.825.0",
-    "@aws-sdk/client-secrets-manager": "^3.825.0",
+    "@aws-sdk/client-auto-scaling": "^3.931.0",
+    "@aws-sdk/client-dynamodb": "^3.931.0",
+    "@aws-sdk/client-ec2": "^3.931.0",
+    "@aws-sdk/client-elastic-load-balancing-v2": "^3.931.0",
+    "@aws-sdk/client-secrets-manager": "^3.931.0",
     "@aws-sdk/util-retry": "^3.374.0",
     "@cdktf/provider-aws": "^21.8.0",
     "@cdktf/provider-null": "^11.0.0",
