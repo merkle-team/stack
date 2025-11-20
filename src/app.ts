@@ -17,6 +17,7 @@ import {
 } from "@aws-sdk/client-auto-scaling";
 import { ConfiguredRetryStrategy } from "@aws-sdk/util-retry";
 import { DynamoDB } from "@aws-sdk/client-dynamodb";
+import { S3, PutObjectCommand } from "@aws-sdk/client-s3";
 import { PodStack } from "./stacks/PodStack";
 import { execa } from "execa";
 import {
@@ -147,6 +148,14 @@ export class App {
       region: this.config.region,
       credentials: this.createCredentialsProvider(),
       retryStrategy: this.createRetryStrategy("DynamoDB"),
+    });
+  }
+
+  private createS3Client(): S3 {
+    return new S3({
+      region: this.config.region,
+      credentials: this.createCredentialsProvider(),
+      retryStrategy: this.createRetryStrategy("S3"),
     });
   }
 
@@ -422,14 +431,33 @@ export class App {
       waitInstanceRefreshesExitStatus === 0
         ? waitConsulServiceHealthExitStatus
         : waitInstanceRefreshesExitStatus; // TODO: Should we return 1 if any of these are non-zero?
-    if (exitStatus !== 0) {
+    if (exitStatus === 0) {
+      console.log(
+        `Deploy completed successfully in ${Math.floor(
+          (Date.now() - deployStartTime) / 1000
+        )}s`
+      );
+      try {
+        const s3 = this.createS3Client();
+        const configContents = readFileSync(this.options.config as string);
+        const release = this.options.release as string;
+        const key = `deploy-configs/${this.config.project}/${release}.yml`;
+
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: "warpcast-terraform-state",
+            Key: key,
+            Body: configContents,
+          })
+        );
+        console.log(`Successfully stored deploy config in S3 at ${key}`);
+      } catch (e) {
+        console.warn("Failed to store deploy config in S3", e);
+        // Do not fail the deploy if S3 upload fails.
+      }
+    } else {
       console.error("Deploy failed");
     }
-    console.log(
-      `Deploy completed successfully in ${Math.floor(
-        (Date.now() - deployStartTime) / 1000
-      )}s`
-    );
     return exitStatus;
   }
 
@@ -1978,7 +2006,7 @@ export class App {
         `${sshUser}@${host}`,
       ],
       {
-        stdio: ["inherit", "inherit", "inherit"],
+        stdio: ["inherit", "inherit", "inherit"] as any,
       }
     );
     return sshResult.exitCode;
