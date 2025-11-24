@@ -458,6 +458,15 @@ export class App {
           return;
         }
 
+        const podConfig = this.config.pods[podName];
+        const deleteOldDeployDelay = podConfig.deploy.deleteOldDeployDelay;
+        if (deleteOldDeployDelay) {
+          console.log(
+            `Waiting ${deleteOldDeployDelay} seconds before running pre-container-shutdown script for pod ${podName}`
+          );
+          await sleep(deleteOldDeployDelay * 1000);
+        }
+
         await withTimeout(
           this.runPreContainerShutdownScript(
             podName,
@@ -802,9 +811,16 @@ export class App {
     if (asgsToDelete?.length) {
       const results = await Promise.allSettled(
         asgsToDelete?.map(async (asg) => {
-          const deleteOldDeployDelay =
-            this.config.pods[podName].deploy.deleteOldDeployDelay;
-          if (!newRelease && deleteOldDeployDelay) {
+          const podConfig = this.config.pods[podName];
+          const deleteOldDeployDelay = podConfig.deploy.deleteOldDeployDelay;
+          const preContainerShutdownScript =
+            podConfig.preContainerShutdownScript;
+          // Don't wait if there's a pre-container-shutdown script since we will have already waited for the shutdown script
+          if (
+            !newRelease &&
+            !preContainerShutdownScript &&
+            deleteOldDeployDelay
+          ) {
             console.log(
               `Waiting ${deleteOldDeployDelay} seconds before deleting ASG ${asg.AutoScalingGroupName} for pod ${podName}`
             );
