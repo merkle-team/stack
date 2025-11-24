@@ -34,6 +34,7 @@ type ExitStatus = number;
 
 export class App {
   private config: DeployConfig;
+  private credentialsProvider?: Provider<AwsCredentialIdentity>;
 
   constructor(
     private readonly cliPath: string,
@@ -51,10 +52,10 @@ export class App {
   private createRetryStrategy(serviceName: string): ConfiguredRetryStrategy {
     const maxAttempts = process.env.AWS_MAX_ATTEMPTS
       ? parseInt(process.env.AWS_MAX_ATTEMPTS, 10)
-      : 5;
+      : 10; // Increased from 5 to 10 for better handling of spurious failures
 
     return new ConfiguredRetryStrategy(maxAttempts, (attempt: number) => {
-      const delayMs = 300 * 2 ** attempt;
+      const delayMs = 500 * 2 ** attempt; // Increased base delay from 300ms to 500ms
       if (attempt > 0) {
         console.warn(
           `[WARN] AWS ${serviceName} throttling detected - retrying (attempt ${attempt}/${maxAttempts}, waiting ${delayMs}ms)`
@@ -65,12 +66,17 @@ export class App {
   }
 
   private createCredentialsProvider(): Provider<AwsCredentialIdentity> {
+    // Return cached provider if already created
+    if (this.credentialsProvider) {
+      return this.credentialsProvider;
+    }
+
     const maxAttempts = process.env.AWS_MAX_ATTEMPTS
       ? parseInt(process.env.AWS_MAX_ATTEMPTS, 10)
-      : 5;
+      : 10; // Increased from 5 to 10 for spurious failures
     const baseProvider = defaultProvider();
 
-    return async () => {
+    this.credentialsProvider = async () => {
       let lastError: Error | undefined;
 
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -93,7 +99,8 @@ export class App {
             errorName === "CredentialsProviderError" ||
             errorName === "ProviderError"
           ) {
-            const delayMs = 300 * 2 ** attempt;
+            // Increased base delay from 300ms to 500ms for better handling of spurious failures
+            const delayMs = 500 * 2 ** attempt;
 
             if (attempt < maxAttempts - 1) {
               console.warn(
@@ -124,6 +131,8 @@ export class App {
         new Error("Failed to load AWS credentials after multiple attempts")
       );
     };
+
+    return this.credentialsProvider;
   }
 
   private createAutoScalingClient(): AutoScaling {
