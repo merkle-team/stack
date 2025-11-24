@@ -784,20 +784,34 @@ export class App {
       ],
     });
     // Get the last created ASG, since there might be multiple ASGs due to other/earlier deployments that haven't yet been cleaned up
-    const oldAsgs = newRelease
-      ? asgResult.AutoScalingGroups?.filter(
-          (asg) =>
-            asg.Tags?.find((tag) => tag.Key === "release")?.Value === releaseId
-        )
-      : asgResult.AutoScalingGroups?.filter(
-          (asg) =>
-            asg.Tags?.find((tag) => tag.Key === "release")?.Value !== releaseId
-        );
-    if (oldAsgs?.length) {
+    const asgsToDelete = (
+      newRelease
+        ? asgResult.AutoScalingGroups?.filter(
+            (asg) =>
+              asg.Tags?.find((tag) => tag.Key === "release")?.Value ===
+              releaseId
+          )
+        : asgResult.AutoScalingGroups?.filter(
+            (asg) =>
+              asg.Tags?.find((tag) => tag.Key === "release")?.Value !==
+              releaseId
+          )
+    )?.filter(
+      (asg) => asg.Status === undefined /* Ignore ASGs already being deleted */
+    );
+    if (asgsToDelete?.length) {
       const results = await Promise.allSettled(
-        oldAsgs?.map(async (asg) => {
+        asgsToDelete?.map(async (asg) => {
+          const deleteOldDeployDelay =
+            this.config.pods[podName].deploy.deleteOldDeployDelay;
+          if (!newRelease && deleteOldDeployDelay) {
+            console.log(
+              `Waiting ${deleteOldDeployDelay} seconds before deleting ASG ${asg.AutoScalingGroupName} for pod ${podName}`
+            );
+            await sleep(deleteOldDeployDelay * 1000);
+          }
           console.log(
-            `Deleting old ASG ${asg.AutoScalingGroupName} for pod ${podName}`
+            `Deleting ASG ${asg.AutoScalingGroupName} for pod ${podName}`
           );
           await asgClient.deleteAutoScalingGroup({
             AutoScalingGroupName: asg.AutoScalingGroupName,

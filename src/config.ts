@@ -118,6 +118,7 @@ export const DeployConfigSchema = Type.Object({
         shutdownTimeout: Type.Integer({ minimum: 0 }),
         instanceRefreshTimeout: Type.Optional(Type.Integer({ minimum: 300 })),
         timeout: Type.Optional(Type.Integer({ minimum: 10 })),
+        deleteOldDeployDelay: Type.Optional(Type.Integer({ minimum: 0 })),
         orchestrator: Type.Optional(
           Type.Union([
             Type.Literal("asg"), // Default: use ASG's built-in logic to determine when deploy is finished
