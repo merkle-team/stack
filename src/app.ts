@@ -352,6 +352,17 @@ export class App {
       }
     }
 
+    const swapStatus = await this.swapContainers(
+      release,
+      alreadyRunningInstances,
+      podNames
+    );
+    if (swapStatus !== 0) {
+      // No need to wait for instance refreshes since we know the deploy is a failure
+      // TODO: Cancel existing instance refreshes?
+      return swapStatus;
+    }
+
     // Since we may have triggered an instance refresh, wait until all ASGs are healthy
     // and at desired count, or consider the deploy a failure.
     // We do this first since Consul-based health checks usually finish much faster.
@@ -394,17 +405,6 @@ export class App {
                   "Failed to run pre-terminate script for one or more pods"
                 );
                 // Continue with swap even if pre-terminate script fails, since it's optional
-              }
-
-              const swapStatus = await this.swapContainers(
-                release,
-                currentlyRunningInstancesByPod[podName],
-                [podName]
-              );
-              if (swapStatus !== 0) {
-                // No need to wait for instance refreshes since we know the deploy is a failure
-                // TODO: Cancel existing instance refreshes?
-                return swapStatus;
               }
             }
           }
