@@ -304,7 +304,9 @@ export function parseConfig(configPath: string) {
       throw new Error(
         `Invalid compose file ${
           podConfig.compose
-        } for pod ${podName}\n${result.stdout.toString()}\n${result.stderr.toString()}`
+        } for pod ${podName}\n${result.stdout.toString()}\n${(
+          result.stderr || ""
+        ).toString()}`
       );
     }
   }
