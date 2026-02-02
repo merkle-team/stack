@@ -6,7 +6,11 @@ Tool for deploying services on AWS EC2 instances.
 ## Publishing a new Stack version
 
 1. Updated the version in [`package.json`](package.json). Commit your changes.
-2. Tag the commit you wish to release with a name of the form `vX.Y.Z`.
+2. Tag the commit you wish to release with a name of the form `vX.Y.Z`:
+   ```
+   VERSION=x.y.z
+   git tag -s -a v${VERSION} -m ${VERSION}
+   ```
 3. Push that tag to this repo to have a Docker image published to `farcasterxyz/stack` on Docker Hub.
 
 ## Installation
