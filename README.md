@@ -1,6 +1,13 @@
 # `stack`
 
 Tool for deploying services on AWS EC2 instances.
+**Not recommended for external use.**
+
+## Publishing a new Stack version
+
+1. Updated the version in [`package.json`](package.json). Commit your changes.
+2. Tag the commit you wish to release with a name of the form `vX.Y.Z`.
+3. Push that tag to this repo to have a Docker image published to `farcasterxyz/stack` on Docker Hub.
 
 ## Installation
 
@@ -9,7 +16,7 @@ Stack is distributed as a Docker image.
 ### Requirements
 
 - Docker
-- **Architecture**: x86_64 (a.k.a. Intel) or arm64 (a.k.a. Apple Silicon)
+- **Architecture**: arm64 (a.k.a. Apple Silicon)
 
 To avoid having to install Terraform + the Terraform CDK, a Docker image is provided along with a helper script you can install to make running Stack easier.
 
