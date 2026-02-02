@@ -12,8 +12,8 @@ STACK_VERSION=${STACK_VERSION:-$(git rev-parse HEAD)}
 
 echo "Publishing Stack $STACK_VERSION"
 
-depot build -f Dockerfile \
-  --platform "linux/amd64,linux/arm64" \
+docker build -f Dockerfile \
+  --platform "linux/arm64" \
   --push \
   -t farcasterxyz/stack:${STACK_VERSION} \
   -t farcasterxyz/stack:latest \
