@@ -13,7 +13,6 @@ STACK_VERSION=${STACK_VERSION:-$(git rev-parse HEAD)}
 echo "Publishing Stack $STACK_VERSION"
 
 docker build -f Dockerfile \
-  --platform "linux/arm64" \
   --push \
   -t farcasterxyz/stack:${STACK_VERSION} \
   -t farcasterxyz/stack:latest \
