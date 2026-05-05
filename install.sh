@@ -6,6 +6,10 @@
 # You can run it anywhere by executing:
 #
 # /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/merkle-team/stack/refs/heads/main/install.sh)"
+#
+# To install a specific version (including pre-releases), set STACK_VERSION:
+#
+# STACK_VERSION=v1.2.3-pre1 /bin/bash -c "$(curl -fsSL ...)"
 
 set -euo pipefail
 
@@ -54,10 +58,16 @@ if ! chmod +x $location; then
   sudo chmod +x $location
 fi
 
-download_url=$(curl -s https://api.github.com/repos/merkle-team/stack/releases/latest | jq -r ".assets[] | select(.name  == \"stack\") | .browser_download_url")
-if [ -z "$download_url" ]; then
-  echo "Could not find download URL for latest version of Stack"
-  exit 1
+if [ -n "${STACK_VERSION:-}" ]; then
+  # Pin to a specific tag (works for pre-releases too, which the /releases/latest endpoint excludes).
+  download_url="https://github.com/merkle-team/stack/releases/download/${STACK_VERSION}/stack"
+  echo "Installing Stack ${STACK_VERSION}"
+else
+  download_url=$(curl -s https://api.github.com/repos/merkle-team/stack/releases/latest | jq -r ".assets[] | select(.name  == \"stack\") | .browser_download_url")
+  if [ -z "$download_url" ]; then
+    echo "Could not find download URL for latest version of Stack"
+    exit 1
+  fi
 fi
 
 $sudo curl -fsSL "$download_url" --output $location
