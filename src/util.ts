@@ -39,6 +39,10 @@ export function generateDeployScript(
   const secretNames = Object.keys(secretNameMappings);
   const secretBatchSize = 20;
 
+  console.log(
+    `stack: compose for ${pod} raw=${composeContents.length} bytes`
+  );
+
   return `#!/bin/bash
 set -e -o pipefail
 
@@ -113,7 +117,10 @@ if [ ! -d /home/${sshUser}/releases/${releaseId} ]; then
   chmod 400 .env
   rm .static.env .pod.env
 
-  echo "${stringToBase64(composeContents)}" | base64 -d > docker-compose.yml
+  cat > docker-compose.yml <<'COMPOSE_EOF__STACK'
+${composeContents.replace(/\n+$/, "")}
+COMPOSE_EOF__STACK
+  echo "boot: docker-compose.yml size=$(wc -c < docker-compose.yml) bytes"
 
   if [ -f /home/${sshUser}/releases/current ]; then
     echo "Downloading and preparing Docker images on \$INSTANCE_ID \$private_ipv4 before swapping containers"

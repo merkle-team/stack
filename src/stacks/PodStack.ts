@@ -22,7 +22,6 @@ import { generateDeployScript, objectEntries } from "../util";
 import { AutoscalingGroup } from "@cdktf/provider-aws/lib/autoscaling-group";
 import { NetworkInterfaceSgAttachment } from "@cdktf/provider-aws/lib/network-interface-sg-attachment";
 import { Instance } from "@cdktf/provider-aws/lib/instance";
-import { stringToBase64 } from "uint8array-extras";
 import { TerraformStateBackend } from "../constructs/TerraformStateBackend";
 import * as zlib from "zlib";
 import { DataAwsAmi } from "@cdktf/provider-aws/lib/data-aws-ami";
@@ -473,37 +472,51 @@ export class PodStack extends TerraformStack {
       ],
     });
 
-    // Executed by cloud-init when the instance starts up
-    // Use `sensitive` to hide massive base64 blob in diffs
+    // Executed by cloud-init when the instance starts up.
+    // Embed sub-scripts as single-quoted heredocs so the bytes are preserved
+    // verbatim, then gzip the whole script. Cloud-init recognizes the gzip
+    // magic header and decompresses transparently before exec.
+    const beforeInitRaw = podOptions.initScript
+      ? readFileSync(podOptions.initScript).toString()
+      : "#!/bin/bash\n# No script specified in this deploy configuration's initScript\n";
+    console.log(
+      `stack: before-init.sh for ${fullPodName} raw=${beforeInitRaw.length} bytes`
+    );
+
+    const initRaw = generateDeployScript(
+      options.project,
+      options.shortName,
+      options.podOptions,
+      releaseId,
+      composeContents,
+      options.secretMappings
+    );
+    console.log(
+      `stack: init.sh for ${fullPodName} raw=${initRaw.length} bytes`
+    );
+
     const userData = `#!/bin/bash
 set -e -o pipefail
 
 cd /home/${podOptions.sshUser}
-echo "${zlib
-      .gzipSync(
-        podOptions.initScript
-          ? readFileSync(podOptions.initScript).toString()
-          : "#/bin/bash\n# No script specified in this deploy configuration's initScript\n"
-      )
-      .toString("base64")}" | base64 -d | gunzip > before-init.sh
+cat > before-init.sh <<'BEFORE_INIT_EOF__STACK'
+${beforeInitRaw.replace(/\n+$/, "")}
+BEFORE_INIT_EOF__STACK
+echo "boot: before-init.sh size=$(wc -c < before-init.sh) bytes"
 chmod +x before-init.sh
 ./before-init.sh
 
-echo "${zlib
-      .gzipSync(
-        generateDeployScript(
-          options.project,
-          options.shortName,
-          options.podOptions,
-          releaseId,
-          composeContents,
-          options.secretMappings
-        )
-      )
-      .toString("base64")}" | base64 -d | gunzip > init.sh
+cat > init.sh <<'INIT_EOF__STACK'
+${initRaw.replace(/\n+$/, "")}
+INIT_EOF__STACK
+echo "boot: init.sh size=$(wc -c < init.sh) bytes"
 chmod +x init.sh
 su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
 `;
+    const userDataGz = zlib.gzipSync(userData);
+    console.log(
+      `stack: userData for ${fullPodName} pre-gzip=${userData.length} post-gzip=${userDataGz.length} bytes (AWS limit: 16384 raw)`
+    );
 
     // Tags that are assigned to resources created as part of fulfilling the launch template (e.g. instances, volumes, etc.)
     const sharedTags = {
@@ -590,7 +603,7 @@ su ${podOptions.sshUser} /home/${podOptions.sshUser}/init.sh
         },
       ],
 
-      userData: Fn.sensitive(stringToBase64(userData)), // Hide in diffs since it's a large blob
+      userData: Fn.sensitive(userDataGz.toString("base64")), // gzipped; cloud-init auto-decompresses
     });
 
     if (podOptions.singleton) {
