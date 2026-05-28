@@ -385,29 +385,7 @@ export class App {
         release,
         // Pod deploy success callback
         async (podName) => {
-          // Only perform a swap if there are already running instances.
-          if (!this.options.applyOnly && alreadyRunningInstances.length) {
-            // It's possible the above apply command removed instances, so need to check again
-            const currentlyRunningInstances =
-              await this.alreadyRunningInstances([podName]);
-
-            if (currentlyRunningInstances.length) {
-              const currentlyRunningInstancesByPod =
-                await this.alreadyRunningInstancesByPod([podName]);
-              // Run the pre-terminate script for each pod
-              const preTerminateScriptExitStatus =
-                await this.runPreContainerShutdownScripts(
-                  [podName],
-                  currentlyRunningInstancesByPod
-                );
-              if (preTerminateScriptExitStatus !== 0) {
-                console.error(
-                  "Failed to run pre-terminate script for one or more pods"
-                );
-                // Continue with swap even if pre-terminate script fails, since it's optional
-              }
-            }
-          }
+          console.log(`Pod ${podName} passed health checks`);
           return 0;
         },
         // Pod deploy failure callback
@@ -417,7 +395,41 @@ export class App {
         }
       );
 
-    // Delete ASGs only for pods that deployed successfully
+    if (waitConsulServiceHealthExitStatus !== 0) {
+      // If any pod fails, treat the deploy as an atomic failure and keep the
+      // currently-running release for every selected pod.
+      await this.deleteAsgs(podNames, true);
+      return waitConsulServiceHealthExitStatus;
+    }
+
+    // Only perform a swap if there are already running instances.
+    if (!this.options.applyOnly && alreadyRunningInstances.length) {
+      // It's possible the above apply command removed instances, so need to check again
+      const currentlyRunningInstances = await this.alreadyRunningInstances([
+        ...new Set(podNames).difference(failedPods),
+      ]);
+
+      if (currentlyRunningInstances.length) {
+        const currentlyRunningInstancesByPod =
+          await this.alreadyRunningInstancesByPod([
+            ...new Set(podNames).difference(failedPods),
+          ]);
+        // Run the pre-terminate script for each pod
+        const preTerminateScriptExitStatus =
+          await this.runPreContainerShutdownScripts(
+            [...new Set(podNames).difference(failedPods)],
+            currentlyRunningInstancesByPod
+          );
+        if (preTerminateScriptExitStatus !== 0) {
+          console.error(
+            "Failed to run pre-terminate script for one or more pods"
+          );
+          // Continue with swap even if pre-terminate script fails, since it's optional
+        }
+      }
+    }
+
+    // All Consul pods passed health checks, so it is safe to clean up old ASGs.
     const deleteAsgsExitStatus = await this.deleteAsgs([
       ...new Set(podNames).difference(failedPods),
     ]);
@@ -1125,8 +1137,7 @@ export class App {
                 console.log(
                   `Pod ${podName} Consul service [${serviceName}] health checks passed`
                 );
-                await onSuccess(podName); // Make sure we call pre-shutdown hooks BEFORE deleting the old ASG
-                await this.deleteAsgs([podName]); // Immediately clean up the old ASG to reduce open connections to the backend
+                await onSuccess(podName);
                 return;
               }
 
