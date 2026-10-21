@@ -35,6 +35,12 @@ import type { AwsCredentialIdentity, Provider } from "@aws-sdk/types";
 const MAX_RELEASES_TO_KEEP = 10;
 const TF_ENVARS = { TF_IN_AUTOMATION: "1" };
 
+// Consul's HTTPS cert is not in the public trust store. The option is
+// per-request so concurrent pod health checks do not share process.env.
+function consulFetch(url: string) {
+  return fetch(url, { tls: { rejectUnauthorized: false } });
+}
+
 type ExitStatus = number;
 
 // The new fleet is already serving. Callers must not delete it or scale the
@@ -1091,9 +1097,7 @@ export class App {
     const timeoutMs = (this.config.pods[podName].deploy.timeout ?? 600) * 1000;
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
-      process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
-      const response = await fetch(healthCheckUrl.toString());
-      delete process.env["NODE_TLS_REJECT_UNAUTHORIZED"];
+      const response = await consulFetch(healthCheckUrl.toString());
       if (!response.ok) {
         console.error(
           `Failed to check health of ${serviceName} service: ${response.status} - ${response.statusText}`
@@ -1614,9 +1618,9 @@ export class App {
         const deployTimeoutMs =
           (this.config.pods[podName].deploy.timeout ?? 600) * 1000; // Default to 10 minutes if not specified
         while (Date.now() - startTime < deployTimeoutMs) {
-          process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"; // TODO: allow configuring cert chain
-          const healthCheckResult = await fetch(healthCheckUrl.toString());
-          delete process.env["NODE_TLS_REJECT_UNAUTHORIZED"];
+          const healthCheckResult = await consulFetch(
+            healthCheckUrl.toString()
+          );
           if (!healthCheckResult.ok) {
             console.error(
               `Failed to check health of ${serviceName} service: ${healthCheckResult.status} - ${healthCheckResult.statusText}`
