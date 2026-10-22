@@ -4,7 +4,7 @@ FROM hashicorp/terraform:1.12.1 AS terraform
 
 ## BASE ########################################################################
 
-FROM node:20.19.5-slim AS base
+FROM node:22.23.4-slim AS base
 
 WORKDIR /usr/src/app
 
