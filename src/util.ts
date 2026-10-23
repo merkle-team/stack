@@ -32,7 +32,8 @@ export function generateDeployScript(
   podOptions: DeployConfig["pods"][string],
   releaseId: string,
   composeContents: string,
-  secretNameMappings: Record<string, string>
+  secretNameMappings: Record<string, string>,
+  region: string
 ) {
   const sshUser = podOptions.sshUser;
 
@@ -48,33 +49,42 @@ set -e -o pipefail
 
 # ${namespace} ${pod} deploy script
 
+# Without this the AWS CLI looks the region up from IMDS on every call, and
+# that lookup can fail during early boot, which aborts this script.
+export AWS_DEFAULT_REGION=${region}
+
+# IMDS can refuse or time out early in boot. curl only retries transient
+# failures, so a real 404 (e.g. no public IPv4) still fails immediately.
+imds_curl() {
+  curl -sSf --retry 5 --retry-connrefused --retry-delay 1 "\$@"
+}
+
 # Initialize the release directory if we haven't already
 if [ ! -d /home/${sshUser}/releases/${releaseId} ]; then
   new_release_dir="/home/${sshUser}/releases/${releaseId}"
   mkdir -p "$new_release_dir"
   cd "$new_release_dir"
 
-  IMDS_TOKEN="\$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")"
+  IMDS_TOKEN="\$(imds_curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")"
 
   # Create environment file with values that are constant for this deployed instance
   echo "# Instance environment variables (constant for the lifetime of this instance)" > .static.env
   echo "PROJECT=${namespace}" >> .static.env
   echo "RELEASE=${releaseId}" >> .static.env
   echo "POD_NAME=${pod}" >> .static.env
-  REGION=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r .region)
-  echo "REGION=\$REGION" >> .static.env
-  INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+  echo "REGION=${region}" >> .static.env
+  INSTANCE_ID=$(imds_curl -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
   echo "INSTANCE_ID=\$INSTANCE_ID" >> .static.env
   echo "\$INSTANCE_ID" | sudo tee /etc/instance-id > /dev/null
   sudo chmod 444 /etc/instance-id
-  echo "INSTANCE_MARKET=\$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-life-cycle)" >> .static.env
-  private_ipv4="\$(curl -sf -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)"
+  echo "INSTANCE_MARKET=\$(imds_curl -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-life-cycle)" >> .static.env
+  private_ipv4="\$(imds_curl -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)"
   echo "PRIVATE_IPV4=\$private_ipv4" >> .static.env
-  public_ipv4="\$(curl -sf -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 || echo "")"
+  public_ipv4="\$(imds_curl -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "")"
   if [ -n "\$public_ipv4" ]; then
     echo "PUBLIC_IPV4=\$public_ipv4" >> .static.env
   fi
-  ipv6="\$(curl -sf -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/ipv6 || echo "")"
+  ipv6="\$(imds_curl -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/ipv6 2>/dev/null || echo "")"
   if [ -n "\$public_ipv4" ]; then
     echo "IPV6=\$ipv6" >> .static.env
   fi

@@ -2042,7 +2042,8 @@ export class App {
                         podOptions,
                         releaseId,
                         composeContents,
-                        this.allowedPodSecrets(podName)
+                        this.allowedPodSecrets(podName),
+                        this.config.region
                       )}
                     `);
                     const connectResult =
