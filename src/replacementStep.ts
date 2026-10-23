@@ -30,36 +30,39 @@ export type AsgSnapshot = {
   maxSize: number;
 };
 
-// Which ASG to keep when a previous roll died mid-way and left two groups.
-// The oldest group that still has instances is the pre-roll fleet. A newer
-// group is only the fleet once the older one has already been scaled to zero.
-export type FleetRecovery = {
-  canonicalName: string;
-  deleteNames: string[];
-  desired: number;
+// The fleet a roll replaces. A roll that died mid-way leaves the pre-roll ASG
+// and a partial one, both serving, so every ASG with instances is part of the
+// previous fleet. They are retired by the roll, oldest first, and never grown
+// or deleted up front: either would cost capacity or launch old-release
+// instances only to retire them. Only empty ASGs are safe to delete.
+export type RollPlan = {
+  previous: AsgSnapshot[];
+  emptyNames: string[];
+  previousDesired: number;
+  target: number;
   minSize: number;
   maxSize: number;
 };
 
-export function recoverFleet(
-  asgs: AsgSnapshot[],
-  floor: number
-): FleetRecovery {
+export function planRoll(asgs: AsgSnapshot[], floor: number): RollPlan {
   const sorted = [...asgs].sort((a, b) => a.createdAt - b.createdAt);
-  const withCapacity = sorted.filter((asg) => asg.desired > 0);
-  const canonical = withCapacity[0] ?? sorted[0];
-  const desired = Math.max(canonical.desired, floor);
+  const previous = sorted.filter((asg) => asg.desired > 0);
+  // A crashed roll splits the fleet across groups, so the largest one is a
+  // lower bound on the pre-roll size, not the sum.
+  const target = Math.max(floor, ...previous.map((asg) => asg.desired));
+  const reference = previous[0] ?? sorted[0];
   const minSize =
-    canonical.minSize > 0
-      ? Math.min(canonical.minSize, desired)
-      : Math.min(Math.max(floor, 1), desired);
-  const maxSize = Math.max(canonical.maxSize, desired, minSize);
+    reference && reference.minSize > 0
+      ? Math.min(reference.minSize, target)
+      : Math.min(Math.max(floor, 1), target);
+  const maxSize = Math.max(reference?.maxSize ?? 0, target, minSize);
   return {
-    canonicalName: canonical.name,
-    deleteNames: sorted
-      .filter((asg) => asg.name !== canonical.name)
+    previous,
+    emptyNames: sorted
+      .filter((asg) => asg.desired === 0)
       .map((asg) => asg.name),
-    desired,
+    previousDesired: previous.reduce((sum, asg) => sum + asg.desired, 0),
+    target,
     minSize,
     maxSize,
   };

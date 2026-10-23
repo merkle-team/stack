@@ -19,8 +19,9 @@ import { ConfiguredRetryStrategy } from "@aws-sdk/util-retry";
 import { DynamoDB } from "@aws-sdk/client-dynamodb";
 import {
   nextReplacementStep,
-  recoverFleet,
+  planRoll,
   replacementLimits,
+  type AsgSnapshot,
 } from "./replacementStep";
 import { PodStack } from "./stacks/PodStack";
 import { execa } from "execa";
@@ -685,25 +686,16 @@ export class App {
     const results = await Promise.allSettled(
       podNames.map((podName) => this.rollConsulReplacement(podName, releaseId))
     );
-    const failedPods: string[] = [];
-    let committedFailure = false;
-    for (const [index, result] of results.entries()) {
+    // A failed roll has already removed the new instances that never passed
+    // Consul. The rest are serving, so nothing here deletes the new ASG. The
+    // next deploy rolls the mixed fleet.
+    let failed = false;
+    for (const result of results) {
       if (result.status !== "rejected") continue;
       console.error(result.reason);
-      if (result.reason instanceof CommittedRollError) {
-        // The new fleet is live. Deleting it here would take the pod down.
-        committedFailure = true;
-        continue;
-      }
-      failedPods.push(podNames[index]);
+      failed = true;
     }
-    if (failedPods.length) {
-      // Each failed roll already tried to delete its own new ASG. Retry only
-      // those. Pods that already retired the previous fleet are left alone.
-      await this.deleteAsgs(failedPods, true);
-    }
-    if (failedPods.length || committedFailure) return 1;
-    return 0;
+    return failed ? 1 : 0;
   }
 
   private async rollConsulReplacement(podName: string, releaseId: string) {
@@ -738,7 +730,7 @@ export class App {
       return;
     }
 
-    const recovery = recoverFleet(
+    const plan = planRoll(
       active.map((asg) => ({
         name: asg.AutoScalingGroupName as string,
         createdAt: asg.CreatedTime?.getTime() ?? 0,
@@ -748,46 +740,28 @@ export class App {
       })),
       floor
     );
-    const canonical = active.find(
-      (asg) => asg.AutoScalingGroupName === recovery.canonicalName
-    );
-    const needsRestore =
-      recovery.deleteNames.length > 0 ||
-      (canonical?.MinSize ?? 0) !== recovery.minSize ||
-      (canonical?.DesiredCapacity ?? 0) !== recovery.desired ||
-      (canonical?.MaxSize ?? 0) < recovery.maxSize;
-    if (needsRestore) {
-      console.log(
-        `Recovering pod ${podName} from ${active.length} ASGs. Keeping ${
-          recovery.canonicalName
-        } at desired ${recovery.desired}. Deleting ${
-          recovery.deleteNames.join(", ") || "none"
-        }.`
-      );
-      for (const name of recovery.deleteNames) {
-        await this.forceDeleteAsg(name);
-      }
-      await asgClient.updateAutoScalingGroup({
-        AutoScalingGroupName: recovery.canonicalName,
-        MinSize: recovery.minSize,
-        MaxSize: recovery.maxSize,
-        DesiredCapacity: recovery.desired,
-      });
+    for (const name of plan.emptyNames) {
+      console.log(`Removing empty ASG ${name} for pod ${podName}`);
+      await this.forceDeleteAsg(name);
     }
 
-    const target = recovery.desired;
+    const target = plan.target;
     const limits = replacementLimits(
       target,
       autoscaling.minHealthyPercentage,
       autoscaling.maxHealthyPercentage
     );
-    const oldName = recovery.canonicalName;
-    const originalMin = recovery.minSize;
-    const originalMax = recovery.maxSize;
-    const originalDesired = recovery.desired;
+    const oldNames = plan.previous.map((asg) => asg.name);
     const newName = `${this.config.project}-${podName}-${releaseId}`;
 
-    if (newName === oldName) {
+    if (oldNames.includes(newName)) {
+      if (oldNames.length > 1) {
+        throw new Error(
+          `Pod ${podName} already has ASG ${newName} alongside ${
+            oldNames.length - 1
+          } other ASG(s). Redeploy with a new release.`
+        );
+      }
       console.log(
         `Pod ${podName} is already running release ${releaseId}. Leaving the current ASG in place.`
       );
@@ -795,25 +769,54 @@ export class App {
       return;
     }
 
+    if (oldNames.length > 1) {
+      console.log(
+        `Pod ${podName} has ${
+          oldNames.length
+        } ASGs from an earlier roll that did not finish. Rolling all of them: ${oldNames.join(
+          ", "
+        )}`
+      );
+    }
     console.log(
       `Pod ${podName} replacement target=${target} maxTotal=${limits.maxTotal} minAlive=${limits.minAlive}`
     );
 
     // Desired cannot drop below MinSize. Lower it so instances can be retired
     // one at a time, and put it back if the roll fails.
-    await asgClient.updateAutoScalingGroup({
-      AutoScalingGroupName: oldName,
-      MinSize: 0,
-    });
+    //
+    // Retiring specific instances can leave a zone short. AZRebalance would
+    // then launch an old-release instance and terminate a serving one without
+    // the pre-container-shutdown drain, so it stays off until the old ASGs are
+    // deleted, or until a failed roll hands them back.
+    const rebalanceAlreadySuspended = new Set(
+      active
+        .filter((asg) =>
+          asg.SuspendedProcesses?.some(
+            (process) => process.ProcessName === "AZRebalance"
+          )
+        )
+        .map((asg) => asg.AutoScalingGroupName as string)
+    );
+    for (const name of oldNames) {
+      await asgClient.updateAutoScalingGroup({
+        AutoScalingGroupName: name,
+        MinSize: 0,
+      });
+      await asgClient.suspendProcesses({
+        AutoScalingGroupName: name,
+        ScalingProcesses: ["AZRebalance"],
+      });
+    }
 
     try {
       await this.createAsg(podName, {
         minSize: 0,
-        maxSize: Math.max(originalMax, target),
+        maxSize: plan.maxSize,
         desiredCapacity: 0,
       });
 
-      let oldDesired = originalDesired;
+      let oldDesired = plan.previousDesired;
       let newDesired = 0;
       let launchedSinceRetire = false;
       for (let stepCount = 0; stepCount < target * 4 + 4; stepCount++) {
@@ -847,8 +850,21 @@ export class App {
         }
         launchedSinceRetire = false;
         console.log(`Retiring ${step.count} old ${podName} instance(s)`);
-        await this.retireAsgInstances(podName, oldName, step.count);
-        oldDesired = await this.asgDesiredCapacity(asgClient, oldName);
+        let remaining = step.count;
+        for (const name of oldNames) {
+          if (remaining <= 0) break;
+          const count = Math.min(
+            remaining,
+            await this.asgDesiredCapacity(asgClient, name)
+          );
+          if (count <= 0) continue;
+          await this.retireAsgInstances(podName, name, count);
+          remaining -= count;
+        }
+        oldDesired = 0;
+        for (const name of oldNames) {
+          oldDesired += await this.asgDesiredCapacity(asgClient, name);
+        }
       }
 
       const finished = nextReplacementStep({ oldDesired, newDesired }, limits);
@@ -859,22 +875,20 @@ export class App {
       }
     } catch (error) {
       console.error(
-        `Rolling replacement failed for pod ${podName}. Restoring the previous ASG capacity.`
+        `Rolling replacement failed for pod ${podName}. Keeping every instance that passed Consul.`
       );
-      await asgClient
-        .updateAutoScalingGroup({
-          AutoScalingGroupName: oldName,
-          MinSize: originalMin,
-          MaxSize: originalMax,
-          DesiredCapacity: originalDesired,
-        })
-        .catch((restoreError) => {
-          console.error(
-            `Failed to restore ASG ${oldName} after a rolled replacement error`,
-            restoreError
-          );
-        });
-      await this.deleteAsg(podName, true);
+      await this.settleFailedRoll(
+        podName,
+        releaseId,
+        newName,
+        plan.previous,
+        rebalanceAlreadySuspended
+      ).catch((settleError) => {
+        console.error(
+          `Failed to settle pod ${podName} after a rolled replacement error`,
+          settleError
+        );
+      });
       throw error;
     }
 
@@ -883,8 +897,8 @@ export class App {
     try {
       await asgClient.updateAutoScalingGroup({
         AutoScalingGroupName: newName,
-        MinSize: originalMin,
-        MaxSize: Math.max(originalMax, target),
+        MinSize: plan.minSize,
+        MaxSize: plan.maxSize,
         DesiredCapacity: target,
       });
     } catch (error) {
@@ -905,6 +919,81 @@ export class App {
       throw new CommittedRollError(
         `Pod ${podName} is serving ${releaseId}, but deleting the previous ASG failed`
       );
+    }
+  }
+
+  // A roll can fail after old instances are retired, so restoring the old
+  // ASGs means launching cold instances while deleting the new ones takes
+  // serving capacity away. Instead, keep every instance that passed Consul,
+  // terminate only the new ones that did not, and leave the mixed fleet for
+  // the next deploy to roll. Nothing here waits on health checks.
+  private async settleFailedRoll(
+    podName: string,
+    releaseId: string,
+    newName: string,
+    previous: AsgSnapshot[],
+    rebalanceAlreadySuspended: Set<string>
+  ) {
+    const asgClient = this.createAutoScalingClient();
+    for (const asg of previous) {
+      const desired = await this.asgDesiredCapacity(asgClient, asg.name);
+      await asgClient.updateAutoScalingGroup({
+        AutoScalingGroupName: asg.name,
+        MinSize: Math.min(asg.minSize, desired),
+      });
+      if (!rebalanceAlreadySuspended.has(asg.name)) {
+        await asgClient.resumeProcesses({
+          AutoScalingGroupName: asg.name,
+          ScalingProcesses: ["AZRebalance"],
+        });
+      }
+    }
+
+    const groupResult = await asgClient.describeAutoScalingGroups({
+      AutoScalingGroupNames: [newName],
+    });
+    const group = groupResult.AutoScalingGroups?.[0];
+    if (!group) return;
+    const instanceIds = (group.Instances ?? [])
+      .map((instance) => instance.InstanceId)
+      .filter((instanceId): instanceId is string => !!instanceId);
+
+    const passing = await this.consulPassingAddresses(podName, releaseId);
+    const described = instanceIds.length
+      ? await this.createEC2Client().describeInstances({
+          InstanceIds: instanceIds,
+        })
+      : undefined;
+    const failing = (
+      described?.Reservations?.flatMap(
+        (reservation) => reservation.Instances ?? []
+      ) ?? []
+    )
+      .filter(
+        (instance) =>
+          !instance.PrivateIpAddress || !passing.has(instance.PrivateIpAddress)
+      )
+      .map((instance) => instance.InstanceId as string);
+
+    if (failing.length === instanceIds.length) {
+      console.log(
+        `No ${podName} instances on ${releaseId} passed Consul. Deleting ASG ${newName}.`
+      );
+      await this.forceDeleteAsg(newName);
+      return;
+    }
+    console.log(
+      `Keeping ${
+        instanceIds.length - failing.length
+      } ${podName} instance(s) on ${releaseId} that passed Consul. Terminating ${
+        failing.length
+      } that did not.`
+    );
+    for (const instanceId of failing) {
+      await asgClient.terminateInstanceInAutoScalingGroup({
+        InstanceId: instanceId,
+        ShouldDecrementDesiredCapacity: true,
+      });
     }
   }
 
@@ -1078,21 +1167,9 @@ export class App {
     expected: number
   ) {
     if (expected <= 0) return;
-    const serviceName = this.config.pods[podName].deploy.healthCheckService;
-    if (!serviceName) {
-      throw new Error(
-        `Pod ${podName} has no health check service name configured`
-      );
-    }
-
-    const consulHost = await this.consulHttpsHost();
-    const healthCheckUrl = new URL(
-      `${consulHost}/v1/health/service/${serviceName}`
-    );
-    healthCheckUrl.searchParams.append("passing", "true");
-    healthCheckUrl.searchParams.append(
-      "filter",
-      `"${releaseId}" in Service.Tags`
+    const { serviceName, healthCheckUrl } = await this.consulPassingUrl(
+      podName,
+      releaseId
     );
     const timeoutMs = (this.config.pods[podName].deploy.timeout ?? 600) * 1000;
     const start = Date.now();
@@ -1120,6 +1197,46 @@ export class App {
     }
     throw new Error(
       `Pod ${podName} did not reach ${expected} healthy Consul instances within ${timeoutMs}ms`
+    );
+  }
+
+  private async consulPassingUrl(podName: string, releaseId: string) {
+    const serviceName = this.config.pods[podName].deploy.healthCheckService;
+    if (!serviceName) {
+      throw new Error(
+        `Pod ${podName} has no health check service name configured`
+      );
+    }
+
+    const consulHost = await this.consulHttpsHost();
+    const healthCheckUrl = new URL(
+      `${consulHost}/v1/health/service/${serviceName}`
+    );
+    healthCheckUrl.searchParams.append("passing", "true");
+    healthCheckUrl.searchParams.append(
+      "filter",
+      `"${releaseId}" in Service.Tags`
+    );
+    return { serviceName, healthCheckUrl };
+  }
+
+  /** Private IPs of the instances on a release that currently pass Consul. */
+  private async consulPassingAddresses(podName: string, releaseId: string) {
+    const { serviceName, healthCheckUrl } = await this.consulPassingUrl(
+      podName,
+      releaseId
+    );
+    const response = await consulFetch(healthCheckUrl.toString());
+    if (!response.ok) {
+      throw new Error(
+        `Failed to check health of ${serviceName} service: ${response.status} - ${response.statusText}`
+      );
+    }
+    const data: unknown = await response.json();
+    return new Set(
+      (Array.isArray(data) ? data : [])
+        .map((entry) => entry?.Node?.Address)
+        .filter((address): address is string => typeof address === "string")
     );
   }
 

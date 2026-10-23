@@ -2,9 +2,25 @@ import { describe, expect, test } from "bun:test";
 
 import {
   nextReplacementStep,
-  recoverFleet,
+  planRoll,
   replacementLimits,
+  type ReplacementLimits,
 } from "./replacementStep";
+
+// Runs a roll to completion and returns the total instance count after each step.
+function rollTotals(limits: ReplacementLimits, oldDesired: number) {
+  let newDesired = 0;
+  const totals: number[] = [];
+  for (let i = 0; i < 40; i++) {
+    const step = nextReplacementStep({ oldDesired, newDesired }, limits);
+    if (step.kind === "done") return totals;
+    if (step.kind === "stuck") throw new Error("roll got stuck");
+    if (step.kind === "launch") newDesired += step.count;
+    if (step.kind === "retire") oldDesired -= step.count;
+    totals.push(oldDesired + newDesired);
+  }
+  throw new Error("roll did not finish");
+}
 
 describe("replacementLimits", () => {
   test("110 on 6 and 4 instances is exactly one extra box", () => {
@@ -96,60 +112,90 @@ describe("nextReplacementStep", () => {
   });
 });
 
-describe("recoverFleet", () => {
-  test("a crashed roll keeps the older fleet and deletes the partial one", () => {
-    const recovery = recoverFleet(
+describe("planRoll", () => {
+  test("a capacity raise launches new instances instead of growing the old fleet", () => {
+    const plan = planRoll(
+      [{ name: "old", createdAt: 1, desired: 2, minSize: 2, maxSize: 3 }],
+      6
+    );
+    expect(plan.previous.map((asg) => asg.name)).toEqual(["old"]);
+    expect(plan.previousDesired).toBe(2);
+    expect(plan.target).toBe(6);
+
+    const totals = rollTotals(replacementLimits(6, 100, 110), 2);
+    expect(Math.max(...totals)).toBe(7);
+  });
+
+  test("a crashed roll keeps the partial fleet serving instead of deleting it", () => {
+    const plan = planRoll(
       [
-        { name: "old", createdAt: 1, desired: 5, minSize: 0, maxSize: 6 },
-        { name: "partial", createdAt: 2, desired: 1, minSize: 0, maxSize: 6 },
+        { name: "old", createdAt: 1, desired: 3, minSize: 0, maxSize: 7 },
+        { name: "partial", createdAt: 2, desired: 3, minSize: 0, maxSize: 7 },
       ],
       6
     );
-    expect(recovery).toEqual({
-      canonicalName: "old",
-      deleteNames: ["partial"],
-      desired: 6,
-      minSize: 6,
-      maxSize: 6,
-    });
+    expect(plan.previous.map((asg) => asg.name)).toEqual(["old", "partial"]);
+    expect(plan.emptyNames).toEqual([]);
+    expect(plan.previousDesired).toBe(6);
+    expect(plan.target).toBe(6);
+
+    const totals = rollTotals(replacementLimits(6, 100, 110), 6);
+    expect(Math.min(...totals)).toBe(6);
+    expect(Math.max(...totals)).toBe(7);
   });
 
-  test("an empty newer ASG is not treated as the fleet", () => {
-    const recovery = recoverFleet(
+  test("a crashed 200% roll retires down to the target without a dip", () => {
+    const plan = planRoll(
+      [
+        { name: "old", createdAt: 1, desired: 6, minSize: 0, maxSize: 12 },
+        { name: "partial", createdAt: 2, desired: 6, minSize: 0, maxSize: 12 },
+      ],
+      6
+    );
+    expect(plan.target).toBe(6);
+    expect(plan.previousDesired).toBe(12);
+
+    const totals = rollTotals(replacementLimits(6, 100, 200), 12);
+    expect(Math.min(...totals)).toBe(6);
+    expect(Math.max(...totals)).toBe(12);
+  });
+
+  test("an empty newer ASG is deleted and is not part of the fleet", () => {
+    const plan = planRoll(
       [
         { name: "old", createdAt: 1, desired: 6, minSize: 0, maxSize: 6 },
         { name: "empty", createdAt: 2, desired: 0, minSize: 0, maxSize: 6 },
       ],
       6
     );
-    expect(recovery.canonicalName).toBe("old");
-    expect(recovery.deleteNames).toEqual(["empty"]);
-    expect(recovery.desired).toBe(6);
-    expect(recovery.minSize).toBe(6);
+    expect(plan.previous.map((asg) => asg.name)).toEqual(["old"]);
+    expect(plan.emptyNames).toEqual(["empty"]);
+    expect(plan.target).toBe(6);
+    expect(plan.minSize).toBe(6);
   });
 
   test("a finished new fleet is kept once the old group is scaled to zero", () => {
-    const recovery = recoverFleet(
+    const plan = planRoll(
       [
         { name: "old", createdAt: 1, desired: 0, minSize: 0, maxSize: 6 },
         { name: "current", createdAt: 2, desired: 6, minSize: 0, maxSize: 6 },
       ],
       6
     );
-    expect(recovery.canonicalName).toBe("current");
-    expect(recovery.deleteNames).toEqual(["old"]);
-    expect(recovery.minSize).toBe(6);
+    expect(plan.previous.map((asg) => asg.name)).toEqual(["current"]);
+    expect(plan.emptyNames).toEqual(["old"]);
+    expect(plan.minSize).toBe(6);
   });
 
   test("a manual scale-out above the floor is preserved", () => {
-    const recovery = recoverFleet(
+    const plan = planRoll(
       [{ name: "only", createdAt: 1, desired: 8, minSize: 6, maxSize: 8 }],
       6
     );
-    expect(recovery).toEqual({
-      canonicalName: "only",
-      deleteNames: [],
-      desired: 8,
+    expect(plan).toMatchObject({
+      emptyNames: [],
+      previousDesired: 8,
+      target: 8,
       minSize: 6,
       maxSize: 8,
     });
