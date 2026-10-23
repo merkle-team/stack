@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # The image only rebuilds on a release tag, so pinned base images
+  # (hashicorp/terraform, node) go stale unless something proposes bumps.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
