@@ -14,31 +14,31 @@
     "fmt": "bunx prettier --write ."
   },
   "dependencies": {
-    "@aws-sdk/client-auto-scaling": "^3.931.0",
-    "@aws-sdk/client-dynamodb": "^3.931.0",
-    "@aws-sdk/client-ec2": "^3.931.0",
-    "@aws-sdk/client-elastic-load-balancing-v2": "^3.931.0",
-    "@aws-sdk/client-secrets-manager": "^3.931.0",
+    "@aws-sdk/client-auto-scaling": "^3.1156.0",
+    "@aws-sdk/client-dynamodb": "^3.1156.0",
+    "@aws-sdk/client-ec2": "^3.1156.0",
+    "@aws-sdk/client-elastic-load-balancing-v2": "^3.1156.0",
+    "@aws-sdk/client-secrets-manager": "^3.1156.0",
     "@aws-sdk/util-retry": "^3.374.0",
-    "@cdktf/provider-aws": "^21.8.0",
-    "@cdktf/provider-null": "^11.0.0",
+    "@cdktf/provider-aws": "^21.22.1",
+    "@cdktf/provider-null": "^11.0.1",
     "@commander-js/extra-typings": "^12.1.0",
-    "@sinclair/typebox": "^0.32.35",
+    "@sinclair/typebox": "^0.32.37",
     "cdktf-cli": "^0.21.0",
     "commander": "^12.1.0",
-    "constructs": "^10.4.2",
-    "execa": "^9.6.0",
-    "inquirer": "^9.3.7",
-    "uint8array-extras": "^1.4.0",
-    "yaml": "^2.8.0"
+    "constructs": "^10.8.1",
+    "execa": "^9.6.1",
+    "inquirer": "^9.3.8",
+    "uint8array-extras": "^1.6.0",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
-    "@types/bun": "^1.2.15",
-    "@types/inquirer": "^9.0.8",
+    "@types/bun": "^1.4.4",
+    "@types/inquirer": "^9.0.10",
     "cdktf": "^0.21.0",
     "husky": "^9.1.7",
     "lint-staged": "^15.5.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   },
   "lint-staged": {
     "*.ts": "bun run lint-staged"

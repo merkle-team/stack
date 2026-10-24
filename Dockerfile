@@ -1,10 +1,10 @@
 # TERRAFORM
 
-FROM hashicorp/terraform:1.12.1 AS terraform
+FROM hashicorp/terraform:1.16.7 AS terraform
 
 ## BASE ########################################################################
 
-FROM node:20.19.5-slim AS base
+FROM node:26.12.1-trixie-slim AS base
 
 WORKDIR /usr/src/app
 
