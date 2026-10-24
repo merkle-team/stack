@@ -489,7 +489,8 @@ export class PodStack extends TerraformStack {
       options.podOptions,
       releaseId,
       composeContents,
-      options.secretMappings
+      options.secretMappings,
+      options.region
     );
     console.log(
       `stack: init.sh for ${fullPodName} raw=${initRaw.length} bytes`
