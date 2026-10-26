@@ -13,6 +13,30 @@ Tool for deploying services on AWS EC2 instances.
    ```
 3. Push that tag to this repo to have a Docker image published to `farcasterxyz/stack` on Docker Hub.
 
+## Testing changes on test-service
+
+Before releasing a change to deploys, run it against
+[`infra/test-service`](https://github.com/merkle-team/infra/tree/main/test-service), a throwaway
+service that returns 200 OK. With the infra repo checked out next to this one and super-admin AWS
+credentials:
+
+```bash
+bin/test-service.sh plan
+bin/test-service.sh deploy --yes
+```
+
+This builds an image from your checkout and runs it against that config. To try other shapes (more
+instances, different `minHealthyPercentage`/`maxHealthyPercentage`), edit
+`infra/test-service/.stack/deploy.yml` locally without committing it. Tear the service down when
+you're done:
+
+```bash
+bin/test-service.sh destroy --yes
+```
+
+Dependabot proposes bumps for the base images in the [`Dockerfile`](Dockerfile). Since the image
+only rebuilds when a release is tagged, deploy test-service with a bump before merging it.
+
 ## Installation
 
 Stack is distributed as a Docker image.
