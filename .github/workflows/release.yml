@@ -14,8 +14,8 @@ jobs:
     timeout-minutes: 20 # Sometimes build takes a while
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           username: ${{ vars.FARCASTERXYZ_DOCKERHUB_USER }}
           password: ${{ secrets.FARCASTERXYZ_DOCKERHUB_WRITE_PASSWORD }}
@@ -31,7 +31,7 @@ jobs:
           chmod +x ./build/stack
           echo "${{ github.ref_name }}" | cat bin/exec-stack-via-docker.sh - > ./build/stack
 
-      - uses: softprops/action-gh-release@v2.2.2
+      - uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
         with:
           generate_release_notes: true
           # Tags with a hyphen (e.g. v1.2.3-pre1) are treated as pre-releases
