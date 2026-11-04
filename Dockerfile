@@ -11,14 +11,17 @@ WORKDIR /usr/src/app
 COPY --from=terraform /bin/terraform /usr/local/bin/terraform
 
 RUN <<EOF
-apt-get update && apt-get install -y ca-certificates curl
+set -e
+apt-get -o Acquire::Retries=0 update
+apt-get -o Acquire::Retries=0 install -y --only-upgrade apt
+apt-get -o Acquire::Retries=0 install -y ca-certificates curl
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
 chmod a+r /etc/apt/keyrings/docker.asc
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
 
-apt-get update
-apt-get install -y docker-ce-cli docker-compose-plugin fzf ssh python3 make g++ unzip
+apt-get -o Acquire::Retries=0 update
+apt-get -o Acquire::Retries=0 install -y docker-ce-cli docker-compose-plugin fzf ssh python3 make g++ unzip
 
 curl -fsSL https://bun.sh/install | bash -s "bun-v1.1.39"
 EOF
@@ -56,7 +59,7 @@ FROM base AS release
 RUN npm config set update-notifier false
 
 # Install dependencies for AWS CLI
-RUN apt-get update && apt-get install -y \
+RUN apt-get -o Acquire::Retries=0 update && apt-get -o Acquire::Retries=0 install -y \
   curl unzip groff less && \
   rm -rf /var/lib/apt/lists/*
 
