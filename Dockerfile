@@ -12,7 +12,8 @@ COPY --from=terraform /bin/terraform /usr/local/bin/terraform
 
 RUN <<EOF
 set -e
-apt-get -o Acquire::Retries=0 update && apt-get -o Acquire::Retries=0 install -y --only-upgrade apt && \
+apt-get -o Acquire::Retries=0 update
+apt-get -o Acquire::Retries=0 install -y --only-upgrade apt
 apt-get install -y ca-certificates curl
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
