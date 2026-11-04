@@ -11,8 +11,9 @@ WORKDIR /usr/src/app
 COPY --from=terraform /bin/terraform /usr/local/bin/terraform
 
 RUN <<EOF
-echo 'Acquire::Retries "0";' > /etc/apt/apt.conf.d/99-cve-2026-109518 && \
-apt-get update && apt-get install -y ca-certificates curl
+set -e
+apt-get -o Acquire::Retries=0 update && apt-get -o Acquire::Retries=0 install -y --only-upgrade apt && \
+apt-get install -y ca-certificates curl
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
 chmod a+r /etc/apt/keyrings/docker.asc
